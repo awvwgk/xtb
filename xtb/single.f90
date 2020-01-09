@@ -139,6 +139,13 @@ subroutine singlepoint &
 !! ========================================================================
 !  post processing of gradient and energy
 
+   ! apply scaling to energy, gradient and stress tensor
+   if (allocated(calc%scale)) then
+      etot = calc%scale * etot
+      g = calc%scale * g
+      sigma = calc%scale * sigma
+   end if
+
    ! point charge embedding gradient file
    if (pcem%n > 0) then
       call open_file(ich,pcem_grad,'w')

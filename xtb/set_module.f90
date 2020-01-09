@@ -167,6 +167,7 @@ subroutine write_set_scc(ictrl)
    write(ictrl,'(3x,"maxiterations=",i0)') maxscciter
    write(ictrl,'(3x,"temp=",g0)') eTemp
    write(ictrl,'(3x,"broydamp=",g0)') broydamp
+   write(ictrl,'(3x,"scale=",g0)') lambda_scaling
 end subroutine write_set_scc
 
 subroutine write_set_opt(ictrl)
@@ -1296,6 +1297,7 @@ subroutine set_scc(key,val)
    logical,save :: set2 = .true.
    logical,save :: set3 = .true.
    logical,save :: set4 = .true.
+   logical,save :: set5 = .true.
    select case(key)
    case default ! do nothing
       call raise('S',"the key '"//key//"' is not recognized by scc",1)
@@ -1326,6 +1328,9 @@ subroutine set_scc(key,val)
          endif
       endif
       set4 = .false.
+   case('scale')
+      if (get_value(val,ddum).and.set5) lambda_scaling = ddum
+      set5 = .false.
    end select
 end subroutine set_scc
 

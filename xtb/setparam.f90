@@ -55,6 +55,7 @@ module setparam
    logical  :: newdisp = .true.
    logical  :: solve_scc = .true.
    logical  :: periodic = .false.
+   real(wp) :: lambda_scaling = 1.0_wp
 
 !  Geometry input type
    integer,parameter :: p_geo_coord  = 1

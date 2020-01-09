@@ -293,6 +293,11 @@ subroutine rdxargs(fname,xcontrol,fnv,fnx,acc,lgrad,restart,gsolvstate,strict,  
             call rdarg(iarg+1,sec)
             call set_opt('maxcycle',sec)
 
+         case(     '--lambda-scaling')
+            skip = 1
+            call rdarg(iarg+1,sec)
+            call set_scc('scale',sec)
+
          case('-g','--gbsa')
             lgbsa = .true.
             if (iarg.lt.argc) then

@@ -107,6 +107,9 @@ subroutine help
    "      --fod          requests FOD calculation, adjusts",&
    "                     electronic temperature to 12500 K if possible",&
    "",&
+   "      --lambda-scaling REAL",&
+   "                     scale the electronic energy and the gradients",&
+   "",&
    "      --scc, --sp    performs a single point calculation",&
    "",&
    "      --vip          performs calculation of ionisation potential",&

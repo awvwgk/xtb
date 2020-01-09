@@ -413,6 +413,9 @@ $scc
 *maxiteration*='int'::
     adjusts the number of SCC iterations in the first/last SCC calculation
 
+*scale*='real'::
+    scale the electronic energy and the gradients by 'real', default is 1, of course.
+
 $siman
 ~~~~~~
 *dump*='real'::

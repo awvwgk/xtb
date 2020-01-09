@@ -505,6 +505,7 @@ program XTBprog
    endif
 !  initialize PC embedding (set default file names and stuff)
    call init_pcem
+   if (abs(lambda_scaling - 1.0_wp) > 1.0e-10_wp) calc%scale = lambda_scaling
 
 !! ------------------------------------------------------------------------
 !! ------------------------------------------------------------------------

@@ -27,6 +27,7 @@ module tbdef_calculator
    private
 
    type :: tb_calculator
+      real(wp), allocatable :: scale
       type(tb_basisset), allocatable :: basis
       type(scc_parameter), allocatable :: param
    end type tb_calculator
