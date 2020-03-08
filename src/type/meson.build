@@ -16,16 +16,19 @@
 # along with xtb.  If not, see <https://www.gnu.org/licenses/>.
 
 srcs += files(
+  'abstractdata.f90',
   'anc.f90',
   'atomlist.f90',
   'basisset.f90',
   'buffer.f90',
   'calculator.f90',
+  'cuckooroost.f90',
   'data.f90',
   'dispersion_model.f90',
   'environment.f90',
   'fragments.f90',
   'identitymap.f90',
+  'linkedlist.f90',
   'molecule.f90',
   'options.f90',
   'param.f90',

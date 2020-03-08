@@ -38,6 +38,8 @@ set(XTB_SOURCES
   "${XTB_ROOT}/src/mctc/mctc_init.f90"
   "${XTB_ROOT}/src/mctc/error.f90"
   "${XTB_ROOT}/src/mctc/signal.c"
+  "${XTB_ROOT}/src/mctc/murmurhash3.c"
+  "${XTB_ROOT}/src/mctc/hash.f90"
 
   # Class definitions
   "${XTB_ROOT}/src/type/setvar.f90"
@@ -62,6 +64,9 @@ set(XTB_SOURCES
   "${XTB_ROOT}/src/type/reader.f90"
   "${XTB_ROOT}/src/type/identitymap.f90"
   "${XTB_ROOT}/src/type/buffer.f90"
+  "${XTB_ROOT}/src/type/abstractdata.f90"
+  "${XTB_ROOT}/src/type/cuckooroost.f90"
+  "${XTB_ROOT}/src/type/linkedlist.f90"
 
   # Global data
   "${XTB_ROOT}/src/gfn0param.f90"
@@ -291,6 +296,7 @@ set(XTB_F_TEST_SOURCES
   "${XTB_ROOT}/TESTSUITE/tbdef_wsc.f90"
   "${XTB_ROOT}/TESTSUITE/tests_peeq.f90"
   "${XTB_ROOT}/TESTSUITE/thermo.f90"
+  "${XTB_ROOT}/TESTSUITE/cuckooroost.f90"
 )
 
 set(XTB_C_TEST_SOURCES

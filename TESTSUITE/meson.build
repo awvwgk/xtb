@@ -30,6 +30,7 @@ xtb_test += files('peeq.f90')
 xtb_test += files('symmetry.f90')
 xtb_test += files('thermo.f90')
 xtb_test += files('tbdef_atomlist.f90')
+xtb_test += files('cuckooroost.f90')
 
 xtb_test = executable('xtb_test',
                       xtb_test,
@@ -60,6 +61,8 @@ test('GFN1-xTB', xtb_exe, args: ['--coffee', '--gfn', '1', '--strict', '--norest
 test('GFN2-xTB/GBSA', xtb_exe, args: ['--coffee', '--gfn', '2', '--strict', '--gbsa', 'h2o', '--norestart'], env: xtbenv)
 
 # more specific tests are implemented by the tester binary
+test('Abstract: Cuckoo hash map', xtb_test, args: ['abstractdata', 'cuckoohash'], env: xtbenv)
+
 test('Molecule: axis', xtb_test, args: ['xtb_type_molecule', 'axis'], env: xtbenv)
 test('Molecule: MIC', xtb_test, args: ['xtb_type_molecule', 'mic'], env: xtbenv)
 

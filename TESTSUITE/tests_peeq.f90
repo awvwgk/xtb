@@ -135,6 +135,10 @@ program peeq_tester
       case('calc'); call test_thermo_calc
       case('print'); call test_print_thermo
       end select
+   case('abstractdata')
+      select case(sec)
+      case('cuckoohash'); call test_cuckooroost
+      end select
    end select
 
    ! falling through the tester is always an error
