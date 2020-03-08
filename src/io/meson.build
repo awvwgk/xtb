@@ -19,6 +19,7 @@ subdir('reader')
 subdir('writer')
 
 srcs += files(
+  'control.f90',
   'reader.f90',
   'writer.f90',
 )
