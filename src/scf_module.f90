@@ -16,9 +16,25 @@
 ! along with xtb.  If not, see <https://www.gnu.org/licenses/>.
 
 module xtb_scf
-! ========================================================================
-use xtb_mctc_accuracy, only : wp
+   use xtb_mctc_accuracy, only : wp
+   use xtb_mctc_convert, only : autoev,evtoau
+   use xtb_type_environment
+   use xtb_type_molecule
+   use xtb_type_wavefunction
+   use xtb_type_basisset
+   use xtb_type_param
+   use xtb_type_data
+   use xtb_type_timer
+   use xtb_type_pcem
+   use xtb_type_neighbourlist, only : TNeighbourList
+   use xtb_aoparam
+   use xtb_setparam
+   use xtb_xtb_coulomb
+   use xtb_xtb_repulsion, only : repulsionEnGrad1, repulsionEnGrad2
    implicit none
+   private
+
+   public :: scf
 
    logical,private,parameter :: profile = .true.
 
@@ -29,27 +45,9 @@ contains
 subroutine scf(env, mol, wfn, basis, param, pcem, neighList, wsCell, &
       & egap, et, maxiter, prlevel, restart, grd, acc, eel, g, res)
 
-   use xtb_mctc_convert, only : autoev,evtoau
-
-! ========================================================================
-!  type definitions
-   use xtb_type_environment
-   use xtb_type_molecule
-   use xtb_type_wavefunction
-   use xtb_type_basisset
-   use xtb_type_param
-   use xtb_type_data
-   use xtb_type_timer
-   use xtb_type_pcem
-   use xtb_type_neighbourlist, only : TNeighbourList
-
-! ========================================================================
-!  global storage
-   use xtb_aoparam
-   use xtb_setparam
-
 ! ========================================================================
    use xtb_scc_core
+   use xtb_grad_core
 
 ! ========================================================================
    use xtb_aespot,    only : ovlp2,sdqint,setdqlist,get_radcn,setvsdq, &
@@ -87,6 +85,7 @@ subroutine scf(env, mol, wfn, basis, param, pcem, neighList, wsCell, &
    real(wp),intent(inout) :: eel
    real(wp),intent(inout) :: g(3,mol%n)
    type(scc_results),intent(out) :: res
+   real(wp) :: sigma(3,3)
 
 ! ========================================================================
    real(wp),allocatable :: cn(:)
@@ -135,10 +134,13 @@ subroutine scf(env, mol, wfn, basis, param, pcem, neighList, wsCell, &
    integer,allocatable :: xblist(:,:)
    real(wp),allocatable :: sqrab(:)
    real(wp),allocatable :: dcn(:,:,:)
+   !> Number of neighbours for each atom up to a certain cutoff radius.
+   integer, allocatable :: neighs(:)
+   real(wp), allocatable :: gam2sh(:)
 
    real(wp) :: dipol(3),dip,gsolv,eat,hlgap,efix
    real(wp) :: temp,xsum,eh1,rab,eold,dum,xx,r2
-   real(wp) :: t0,t1,sum,rr,scal,hav,alpha,ep,dx,dy,dz,dum1,r0i,r0j
+   real(wp) :: t0,t1,sum,rr,hav,alpha,ep,dx,dy,dz,dum1,r0i,r0j
    real(wp) :: efa,efb,nfoda,nfodb,hdii,hdjj,qconv,ff
    real(wp) :: x1,x2,ed,intcut,neglect,ga,gb,ehb,h0s,hmat,rab2
    real(wp) :: h0sr,scfconv,rmsq,dum2,drfdxyz(3),yy,tex,rav,tab,ljexp
@@ -209,6 +211,7 @@ subroutine scf(env, mol, wfn, basis, param, pcem, neighList, wsCell, &
    lpcem = pcem%n > 0
    jter=0
 
+   sigma= 0.0_wp ! FIXME
    dipol= 0.0_wp
    eaes = 0.0_wp
    gsolv= 0.0_wp
@@ -256,6 +259,7 @@ subroutine scf(env, mol, wfn, basis, param, pcem, neighList, wsCell, &
 
 !  # atom arrays
    allocate(qq(mol%n),qlmom(3,mol%n),cm5(mol%n),sqrab(mol%n*(mol%n+1)/2),dcn(3,mol%n,mol%n),cn(mol%n))
+   allocate(neighs(len(mol)), source=0)
 
 !  initialize the GBSA module (GBSA works with CM5 charges)
    if(lgbsa) then
@@ -357,12 +361,17 @@ subroutine scf(env, mol, wfn, basis, param, pcem, neighList, wsCell, &
          enddo
       enddo
    endif
-   ! ldep J potentials (in eV) for SCC
-   if(gfn_method.eq.1)then
-      call jpot_gfn1(mol%n,basis%nshell,basis%ash,basis%lsh,mol%at,sqrab,param%alphaj,jab)
-   else !GFN2
-      call jpot_gfn2(mol%n,basis%nshell,basis%ash,basis%lsh,mol%at,sqrab,jab)
-   endif
+
+   ! ldep J potentials (in Eh) for SCC
+   allocate(gam2sh(basis%nshell), source=0.0_wp)
+   do is = 1, basis%nshell
+      iat=basis%ash(is)
+      ati=mol%at(iat)
+      gam2sh(is) = gam(ati)*(1.0_wp+lpar(basis%lsh(is),ati))
+   enddo
+   call get_gfn_coulomb_matrix(mol, basis%nshell, basis%ash, gam2sh, gfn_method, &
+      &                        0.0_wp, .false., jab)
+   jab = jab * autoev
 
 !  J potentials including the point charge stuff
    if(lpcem)then
@@ -546,6 +555,13 @@ subroutine scf(env, mol, wfn, basis, param, pcem, neighList, wsCell, &
    ! this is the classical part of the energy/gradient
    ! dispersion/XB/repulsion for GFN1-xTB
    ! only repulsion for GFN2-xTB
+   call neighlist%getNeighs(neighs, sqrt(1600.0_wp))
+   if (gfn_method == 1) then
+      call repulsionEnGrad1(mol, neighs, neighlist, kexp, rexp, ep, g, sigma)
+   else
+      call repulsionEnGrad2(mol, neighs, neighlist, rexp, ep, g, sigma)
+   end if
+
    call cls_grad(mol%n,mol%at,mol%xyz,sqrab,param,rexp,kexp,nxb,ljexp,xblist, &
       &          ed,exb,ep,g,prlevel)
 
@@ -666,17 +682,17 @@ subroutine scf(env, mol, wfn, basis, param, pcem, neighList, wsCell, &
 !  GRADIENT (now 100% analytical (that's not true!))
 ! ========================================================================
 
-   call scf_grad(mol%n,mol%at,nmat2,matlist2, &
+   call scf_grad(mol,neighList,nmat2,matlist2, &
         &        H0,H1,S, &
-        &        mol%xyz,sqrab,wfn,basis, &
+        &        sqrab,wfn,basis, &
         &        param,kcnao, &
         &        dispdim,c6abns,mbd, &
         &        intcut, &
-        &        gab3,gab5,radcn, &
+        &        gam2sh,gab3,gab5,radcn, &
         &        lpcem,pcem, &
         &        gbsa,gborn,fgb,fhb,cm5a,dcm5a,gsolv, &
         &        eel,ed,embd, &
-        &        g,prlevel)
+        &        g,sigma,prlevel)
 !  print'("Finished gradient calculation")'
 
 !  calculate the norm for printout
@@ -785,17 +801,17 @@ subroutine scf(env, mol, wfn, basis, param, pcem, neighList, wsCell, &
    call deallocate_gbsa(gbsa)
 end subroutine scf
 
-subroutine scf_grad(n,at,nmat2,matlist2, &
+subroutine scf_grad(mol,neighList,nmat2,matlist2, &
       &             H0,H1,S, &
-      &             xyz,sqrab,wfn,basis, &
+      &             sqrab,wfn,basis, &
       &             param,kcnao, &
       &             dispdim,c6abns,mbd, &
       &             intcut, &
-      &             gab3,gab5,radcn, &
+      &             gam2sh,gab3,gab5,radcn, &
       &             lpcem,pcem, &
       &             gbsa,gborn,fgb,fhb,cm5a,dcm5a,gsolv, &
       &             eel,ed,embd, &
-      &             g,printlvl)
+      &             g,sigma,printlvl)
 
 ! ========================================================================
 !  type definitions
@@ -822,24 +838,25 @@ subroutine scf_grad(n,at,nmat2,matlist2, &
 
    implicit none
 
+   type(TMolecule), intent(in) :: mol
+   class(TNeighbourList), intent(in) :: neighList
    type(TWavefunction),intent(in) :: wfn
    type(TBasisset),    intent(in) :: basis
    type(scc_parameter),  intent(in) :: param
-   integer, intent(in)    :: n
-   integer, intent(in)    :: at(n)
    integer, intent(in)    :: nmat2
    integer,intent(in) :: matlist2(2,nmat2)
-   real(wp),intent(in)    :: xyz(3,n)
-   real(wp),intent(in)    :: sqrab(n*(n+1)/2)
+   real(wp),intent(in)    :: sqrab(:)
    real(wp),intent(inout) :: H0(basis%nao*(basis%nao+1)/2)
    real(wp),intent(inout) :: H1(basis%nao*(basis%nao+1)/2)
-   real(wp),intent(inout) :: g(3,n)
+   real(wp),intent(inout) :: g(:, :)
+   real(wp),intent(inout) :: sigma(:, :)
    real(wp),intent(in)    :: S(basis%nao,basis%nao)
    real(wp),intent(in)    :: kcnao(basis%nao)
-   real(wp),intent(in)    :: gab3(n*(n+1)/2)
-   real(wp),intent(in)    :: gab5(n*(n+1)/2)
+   real(wp),intent(in)    :: gam2sh(:)
+   real(wp),intent(in)    :: gab3(:)
+   real(wp),intent(in)    :: gab5(:)
    real(wp),intent(in)    :: intcut
-   real(wp),intent(in)    :: radcn(n)
+   real(wp),intent(in)    :: radcn(:)
    integer, intent(in)    :: dispdim
    real(wp),intent(in)    :: c6abns(dispdim,dispdim)
    integer, intent(in)    :: mbd
@@ -850,10 +867,10 @@ subroutine scf_grad(n,at,nmat2,matlist2, &
    real(wp),intent(inout) :: gborn
    real(wp)               :: ghb
    real(wp),intent(inout) :: gsolv
-   real(wp),intent(in)    :: cm5a(n)
-   real(wp),intent(in)    :: dcm5a(3,n,n)
-   real(wp),intent(inout) :: fgb(n,n)
-   real(wp),intent(inout) :: fhb(n)
+   real(wp),intent(in)    :: cm5a(:)
+   real(wp),intent(in)    :: dcm5a(:,:,:)
+   real(wp),intent(inout) :: fgb(:,:)
+   real(wp),intent(inout) :: fhb(:)
    type(tb_pcem),intent(inout) :: pcem
    logical, intent(in)    :: lpcem
    integer, intent(in)    :: printlvl
@@ -873,8 +890,8 @@ subroutine scf_grad(n,at,nmat2,matlist2, &
    pr = printlvl.gt.1
 
 !  print'("Allocating local memory")'
-   allocate( cn(n), source = 0.0_wp )
-   allocate( dcn(3,n,n), source = 0.0_wp )
+   allocate( cn(mol%n), source = 0.0_wp )
+   allocate( dcn(3,mol%n,mol%n), source = 0.0_wp )
    allocate( H(basis%nao,basis%nao), source = 0.0_wp )
    allocate( X(basis%nao,basis%nao), source = 0.0_wp )
 !  print'("Allocated local memory")'
@@ -885,18 +902,18 @@ subroutine scf_grad(n,at,nmat2,matlist2, &
 
 !  wave function terms
 !  print'("Calculating polynomial derivatives")'
-   call poly_grad(g,n,at,basis%nao,nmat2,matlist2,xyz,sqrab,wfn%P,S,basis%aoat2,basis%lao2,H0)
+   call poly_grad(g,mol%n,mol%at,basis%nao,nmat2,matlist2,mol%xyz,sqrab,wfn%P,S,basis%aoat2,basis%lao2,H0)
 
 !  CN dependent part
 !  print'("Calculating CN dependent derivatives")'
    if (gfn_method.gt.1) then
-      call dncoord_gfn(n,at,xyz,cn,dcn)
-      call hcn_grad_gfn2(g,n,at,basis%nao,nmat2,matlist2,xyz, &
+      call dncoord_gfn(mol%n,mol%at,mol%xyz,cn,dcn)
+      call hcn_grad_gfn2(g,mol%n,mol%at,basis%nao,nmat2,matlist2,mol%xyz, &
            &             param%kspd,param%kmagic,param%kenscal,kcnao,wfn%P,S,dcn, &
            &             basis%aoat2,basis%lao2,basis%valao2,basis%hdiag2,basis%aoexp)
    else
-      call dncoord_d3(n,at,xyz,cn,dcn)
-      call hcn_grad_gfn1(g,n,at,basis%nao,nmat2,matlist2,xyz, &
+      call dncoord_d3(mol%n,mol%at,mol%xyz,cn,dcn)
+      call hcn_grad_gfn1(g,mol%n,mol%at,basis%nao,nmat2,matlist2,mol%xyz, &
            &             param%kspd,param%kmagic,param%kenscal,kcnao,wfn%P,S,dcn, &
            &             basis%aoat2,basis%lao2,basis%valao2,basis%hdiag2)
    endif
@@ -914,24 +931,24 @@ subroutine scf_grad(n,at,nmat2,matlist2, &
 !  multipole gradient stuff
 !  print'("Calculating multipole gradient")'
    if (gfn_method.gt.1) then
-      allocate( vs(n),vd(3,n),vq(6,n), source = 0.0_wp )
+      allocate( vs(mol%n),vd(3,mol%n),vq(6,mol%n), source = 0.0_wp )
 !     VS, VD, VQ-dependent potentials are changed w.r.t. SCF,
 !     since moment integrals are now computed with origin at
 !     respective atoms
-      call setdvsdq(n,at,xyz,wfn%q,wfn%dipm,wfn%qp,gab3,gab5,vs,vd,vq)
-      call ddqint(intcut,n,basis%nao,basis%nbf,at,xyz, &
+      call setdvsdq(mol%n,mol%at,mol%xyz,wfn%q,wfn%dipm,wfn%qp,gab3,gab5,vs,vd,vq)
+      call ddqint(intcut,mol%n,basis%nao,basis%nbf,mol%at,mol%xyz, &
          &        basis%caoshell,basis%saoshell,basis%nprim,basis%primcount, &
          &        basis%alp,basis%cont,wfn%p,vs,vd,vq,H,g)
 
 ! WARNING: dcn is overwritten on output and now dR0A/dXC,
 !          and index i & j are flipped
-      call dradcn(n,at,cn,param%cn_shift,param%cn_expo,param%cn_rmax,dcn)
-      call aniso_grad(n,at,xyz,wfn%q,wfn%dipm,wfn%qp,param%xbrad,param%xbdamp, &
+      call dradcn(mol%n,mol%at,cn,param%cn_shift,param%cn_expo,param%cn_rmax,dcn)
+      call aniso_grad(mol%n,mol%at,mol%xyz,wfn%q,wfn%dipm,wfn%qp,param%xbrad,param%xbdamp, &
            &          radcn,dcn,gab3,gab5,g)
 
    else
 !     wave function terms 2/overlap dependent parts of H
-      call dsint(intcut,n,basis%nao,basis%nbf,at,xyz,sqrab, &
+      call dsint(intcut,mol%n,basis%nao,basis%nbf,mol%at,mol%xyz,sqrab, &
          &        basis%caoshell,basis%saoshell,basis%nprim,basis%primcount, &
          &        basis%alp,basis%cont,H,g)
    endif
@@ -939,7 +956,7 @@ subroutine scf_grad(n,at,nmat2,matlist2, &
 !  dispersion (DFT-D type correction)
 !  print'("Calculating dispersion gradient")'
    if ((gfn_method.gt.1).and.newdisp) then
-      call dispgrad(n,dispdim,at,wfn%q,xyz, &
+      call dispgrad(mol%n,dispdim,mol%at,wfn%q,mol%xyz, &
            &        param%disp,param%wf,param%g_a,param%g_c, &
            &        c6abns,mbd,g,embd)
       embd = embd-ed
@@ -952,10 +969,10 @@ subroutine scf_grad(n,at,nmat2,matlist2, &
       if (gfn_method.gt.1) then
          call compute_gb_egrad(gbsa,wfn%q,gborn,ghb,g,minpr)
       else
-         allocate( qq(n), source = wfn%q )
+         allocate( qq(mol%n), source = wfn%q )
          qq=qq+cm5a
          call compute_gb_egrad(gbsa,qq,gborn,ghb,g,minpr)
-         call cm5_grad_gfn1(g,n,qq,fgb,fhb,dcm5a,lhb)
+         call cm5_grad_gfn1(g,mol%n,qq,fgb,fhb,dcm5a,lhb)
       endif
 !     solvation energy
       gbsa%gborn = gborn
@@ -965,21 +982,17 @@ subroutine scf_grad(n,at,nmat2,matlist2, &
    endif
 
 !  print'("Calculating shell es and repulsion gradient")'
-   if(gfn_method.eq.1)then
-      call shelles_grad_gfn1(g,n,at,basis%nshell,xyz,sqrab, &
-         &                 basis%ash,basis%lsh,param%alphaj,wfn%qsh)
-   else ! GFN2
-      call shelles_grad_gfn2(g,n,at,basis%nshell,xyz,sqrab,basis%ash,basis%lsh,wfn%qsh)
-   endif
+   call get_gfn_coulomb_derivs(mol, basis%nshell, basis%ash, gam2sh, gfn_method, &
+      &                        0.0_wp, .false., wfn%qsh, g, sigma)
 
 ! --- ES point charge embedding
 !  print'("Calculating embedding gradient")'
    if (lpcem) then
       if (gfn_method.eq.1) then
-         call pcem_grad_gfn1(g,pcem%grd,n,pcem,at,basis%nshell,xyz, &
+         call pcem_grad_gfn1(g,pcem%grd,mol%n,pcem,mol%at,basis%nshell,mol%xyz, &
             &                basis%ash,basis%lsh,param%alphaj,wfn%qsh)
       else
-         call pcem_grad_gfn2(g,pcem%grd,n,pcem,at,basis%nshell,xyz, &
+         call pcem_grad_gfn2(g,pcem%grd,mol%n,pcem,mol%at,basis%nshell,mol%xyz, &
             &                basis%ash,basis%lsh,wfn%qsh)
       endif
    endif
@@ -1051,13 +1064,6 @@ subroutine cls_grad(n,at,xyz,sqrab, &
    exb=0.0_wp
    if(gfn_method.lt.2) then
       call xbpot(n,at,xyz,sqrab,xblist,nxb,param%xbdamp,param%xbrad,ljexp,exb,g)
-   endif
-
-!  print'("Calculating shell es and repulsion gradient")'
-   if(gfn_method.eq.1)then
-      call rep_grad_gfn1(g,ep,n,at,xyz,sqrab,kexp,rexp)
-   else ! GFN2
-      call rep_grad_gfn2(g,ep,n,at,xyz,sqrab,rexp)
    endif
 
 end subroutine cls_grad

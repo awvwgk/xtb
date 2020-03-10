@@ -16,12 +16,6 @@
 ! along with xtb.  If not, see <https://www.gnu.org/licenses/>.
 
 module xtb_peeq
-! ------------------------------------------------------------------------
-!  PEEQ method developed and implemented by E. Caldeweyher
-!   01/19
-!  with help of (alphabetically sorted):
-!  S. Ehlert, S. Grimme, P. Pracht
-! ------------------------------------------------------------------------
    use xtb_mctc_accuracy, only : wp
    use xtb_mctc_convert
    use xtb_mctc_la
@@ -44,6 +38,9 @@ module xtb_peeq
    use xtb_solv_gbobc
    use xtb_pbc
    use xtb_lin, only : lin
+   use xtb_xtb_repulsion, only : repulsionEnGrad0
+   use xtb_disp_coordinationnumber, only : getCoordinationNumber, cnType, &
+      & cutCoordinationNumber
    implicit none
    private
 
@@ -95,31 +92,22 @@ subroutine peeq(env, mol, wfn, basis, param, neighList, wsCell, &
 
    character(len=*), parameter :: source = 'peeq'
 
-! ------------------------------------------------------------------------
-!  INPUT
-! ------------------------------------------------------------------------
    type(TEnvironment), intent(inout)    :: env
    type(TMolecule),  intent(in) :: mol     !< molecular structure infomation
    type(TBasisset),  intent(in) :: basis   !< basis set
    type(scc_parameter),intent(in) :: param   !< method parameters
    class(TNeighbourList), intent(in) :: neighList
    class(TNeighbourList), intent(in) :: wsCell
-   real(wp),intent(in)            :: et      !< electronic temperature
-   integer, intent(in)            :: prlevel !< amount of printout
-   logical, intent(in)            :: grd     !< toggles gradient calculation
-   real(wp),intent(in)            :: acc     !< numerical accuracy
-   logical, intent(in)            :: ccm     !< use cyclic cluster model
+   real(wp), intent(in) :: et      !< electronic temperature
+   integer, intent(in) :: prlevel !< amount of printout
+   logical, intent(in) :: grd     !< toggles gradient calculation
+   real(wp), intent(in) :: acc     !< numerical accuracy
+   logical, intent(in) :: ccm     !< use cyclic cluster model
 
-! ------------------------------------------------------------------------
-!  INPUT/OUTPUT
-! ------------------------------------------------------------------------
    real(wp),intent(inout)                    :: etot !< total energy
    real(wp),intent(inout)                    :: egap !< HOMO-LUMO gap
    real(wp),intent(inout),dimension(3,mol%n) :: g    !< molecular gradient
    type(TWavefunction),intent(inout)       :: wfn  !< TB-wavefunction
-! ------------------------------------------------------------------------
-!  OUTPUT
-! ------------------------------------------------------------------------
    type(scc_results),intent(out) :: res !< bundles all calculation informations
 
 ! ------------------------------------------------------------------------
@@ -131,7 +119,6 @@ subroutine peeq(env, mol, wfn, basis, param, neighList, wsCell, &
    real(wp),allocatable,dimension(:,:)   :: X
    real(wp),allocatable,dimension(:,:)   :: S
    real(wp),allocatable,dimension(:,:)   :: H
-   real(wp),allocatable,dimension(:)     :: H0
    real(wp),allocatable,dimension(:)     :: H1
    real(wp),allocatable,dimension(:)     :: zsh
    real(wp),allocatable,dimension(:)     :: kcnao
@@ -286,7 +273,6 @@ subroutine peeq(env, mol, wfn, basis, param, neighList, wsCell, &
    allocate(dcndL(3,3,mol%n));           dcndL = 0.0_wp
    allocate(H(nao,nao));                     H = 0.0_wp
    allocate(X(nao,nao));                     X = 0.0_wp
-   allocate(H0(naop));                      H0 = 0.0_wp
    allocate(S(nao,nao));                     S = 0.0_wp
    allocate(H1(naop));                      H1 = 0.0_wp
    allocate(kcnao(nao));                 kcnao = 0.0_wp
@@ -362,13 +348,10 @@ subroutine peeq(env, mol, wfn, basis, param, neighList, wsCell, &
 ! ---------------------------------------
 !  Get CN(1:n) + dcndr(3,1:n,1:n) under pbc
 ! ---------------------------------------
-   if (mol%npbc > 0) then
-      call get_erf_cn(mol,cn,dcndr,dcndL,thr=900.0_wp)
-      call dncoord_logcn(mol%n,cn,dcndr,dcndL,cn_max=8.0_wp)
-   else
-      call get_erf_cn(mol,cn,dcndr,thr=900.0_wp)
-      call dncoord_logcn(mol%n,cn,dcndr,cn_max=8.0_wp)
-   endif
+   call neighlist%getNeighs(neighs, sqrt(900.0_wp))
+   call getCoordinationNumber(mol, neighs, neighList, cnType%erf, &
+      & cn, dcndr, dcndL)
+   call cutCoordinationNumber(mol%n, cn, dcndr, dcndL, maxCN=8.0_wp)
 
    if (profile) call timer%measure(2)
 ! ---------------------------------------
@@ -414,7 +397,7 @@ subroutine peeq(env, mol, wfn, basis, param, neighList, wsCell, &
 ! ----------------------------------------
 !  D4 dispersion energy + gradient (2B) under pbc
 ! ----------------------------------------
-   call ddisp_peeq(mol,env,param,cn,dcndr,dcndL,grd,ed,g,sigma)
+   call ddisp_peeq(env,mol,neighList,param,cn,dcndr,dcndL,ed,g,sigma)
 
    call env%check(exitRun)
    if (exitRun) then
@@ -427,37 +410,11 @@ subroutine peeq(env, mol, wfn, basis, param, neighList, wsCell, &
 ! ---------------------------------------
 !  Build AO overlap S and H0 integrals under pbc
 ! ---------------------------------------
-   if (mol%npbc > 0) then
-      if (ccm) then
-         call wsCell%getNeighs(neighs, sqrt(800.0_wp))
-         call build_SH0(mol,wsCell%neighs,wsCell,basis,wfn%q,cn,intcut, &
-            &           param%kmagic,ken,param%alphaj,param%kcnsh, &
-            &           param%xbdamp,s,h)
-         call prmat(env%unit, h, nao, nao, 'H0 (new)')
-         call ccm_build_SH0(mol%n,mol%at,basis,nbf,nao,mol%xyz,mol%lattice, &
-            &               wfn%q,cn,intcut, &
-            &               param%kmagic,ken,param%alphaj,param%kcnsh, &
-            &               param%xbdamp,s,h0,mol%wsc)
-         call prmat(env%unit, h0, nao, 0, 'H0 (old)')
-      else
-         call neighlist%getNeighs(neighs, sqrt(800.0_wp))
-         call build_SH0(mol,neighs,neighlist,basis,wfn%q,cn,intcut, &
-            &           param%kmagic,ken,param%alphaj,param%kcnsh, &
-            &           param%xbdamp,s,h)
-         call prmat(env%unit, h, nao, nao, 'H0 (new)')
-         call pbc_build_SH0(mol%n,mol%at,basis,nbf,nao,mol%xyz,mol%lattice,intrep,&
-            &               wfn%q,cn,intcut, &
-            &               param%kmagic,ken,param%alphaj,param%kcnsh, &
-            &               param%xbdamp,s,h0)
-         call prmat(env%unit, h0, nao, 0, 'H0 (old)')
-      endif
-      do i = 1, nao
-         do j = 1, i
-            k = j+i*(i-1)/2
-            H(j,i) = H0(k)
-            H(i,j) = H(j,i)
-         enddo
-      enddo
+   if (ccm) then
+      call wsCell%getNeighs(neighs, sqrt(800.0_wp))
+      call build_SH0(mol,neighs,wsCell,basis,wfn%q,cn,intcut, &
+         &           param%kmagic,ken,param%alphaj,param%kcnsh, &
+         &           param%xbdamp,s,h)
    else
       call neighlist%getNeighs(neighs, sqrt(800.0_wp))
       call build_SH0(mol,neighs,neighlist,basis,wfn%q,cn,intcut, &
@@ -481,10 +438,6 @@ subroutine peeq(env, mol, wfn, basis, param, neighList, wsCell, &
 
    if (profile) call timer%measure(6)
    if (profile) call timer%measure(7,"Zeroth order Hamiltonian")
-! ---------------------------------------
-!  Setup H0 under pbc
-! ---------------------------------------
-!  H0 already initialized
 
    if(.not.orthog)then
       call solve(.true.,nao,wfn%ihomo,scfconv,H,S,X,wfn%P,wfn%emo,fail)
@@ -533,7 +486,8 @@ subroutine peeq(env, mol, wfn, basis, param, neighList, wsCell, &
 ! ======================================================================
    ! repulsion energy + gradient
    !g = 0.0_wp; sigma = 0.0_wp
-   call drep_grad(mol,param,ep,g,sigma)
+   call neighList%getNeighs(neighs, sqrt(1600.0_wp))
+   call repulsionEnGrad0(mol, neighs, neighList, param, ep, g, sigma)
    ! short ranged bond energy + gradient
    call dsrb_grad(mol,param,cn,dcndr,dcndL,esrb,g,sigma) ! WRONG
    !etot = ep + esrb; return
@@ -543,29 +497,22 @@ subroutine peeq(env, mol, wfn, basis, param, neighList, wsCell, &
    tmp = wfn%focc*wfn%emo*evtoau
    ! setup energy weighted density matrix = pew
    call dmat(nao,tmp,wfn%C,pew)
+   if (ccm) then
+      call wsCell%getNeighs(neighs, sqrt(800.0_wp))
+      call build_dSH0(mol,basis,neighs,wsCell,intcut,wfn%q,cn, &
+         &            wfn%P,Pew,g,sigma,dhdcn,dhdq,param%kmagic,ken, &
+         &            param%alphaj,param%kcnsh,param%xbdamp)
+   else
+      call neighList%getNeighs(neighs, sqrt(800.0_wp))
+      call build_dSH0(mol,basis,neighs,neighlist,intcut,wfn%q,cn, &
+         &            wfn%P,Pew,g,sigma,dhdcn,dhdq,param%kmagic,ken, &
+         &            param%alphaj,param%kcnsh,param%xbdamp)
+   endif
    if (mol%npbc > 0) then
-      if (ccm) then
-         call ccm_build_dSH0(mol%n,basis,intcut,nao,nbf,mol%at,mol%xyz, &
-            &                mol%lattice,wfn%q,cn, &
-            &                wfn%P,Pew,g,sigma,dhdcn,dhdq,param%kmagic,ken, &
-            &                param%alphaj,param%kcnsh,param%xbdamp,mol%wsc)
-      else
-         call pbc_build_dSH0(mol%n,basis,intcut,nao,nbf,mol%at,mol%xyz, &
-            &                mol%lattice,intrep,wfn%q,cn, &
-            &                wfn%P,Pew,g,sigma,dhdcn,dhdq,param%kmagic,ken, &
-            &                param%alphaj,param%kcnsh,param%xbdamp)
-      endif
       ! setup CN sigma
       call dgemv('n',9,mol%n,1.0_wp,dcndL,9,dhdcn,1,1.0_wp,sigma,1)
       ! setup  q sigma
       call dgemv('n',9,mol%n,1.0_wp,dqdL, 9, dhdq,1,1.0_wp,sigma,1)
-   else
-      call build_dSH0(mol,basis,neighs,neighlist,intcut,wfn%q,cn, &
-         &            wfn%P,Pew,g,sigma,dhdcn,dhdq,param%kmagic,ken, &
-         &            param%alphaj,param%kcnsh,param%xbdamp)
-!      call mol_build_dSH0(mol%n,basis,intcut,nao,nbf,mol%at,mol%xyz,wfn%q,cn, &
-!         &                wfn%P,Pew,g,sigma,dhdcn,dhdq,param%kmagic,ken, &
-!         &                param%alphaj,param%kcnsh,param%xbdamp)
    endif
    ! setup CN gradient
    call dgemv('n',3*mol%n,mol%n,-1.0_wp,dcndr,3*mol%n,dhdcn,1,1.0_wp,g,1)
@@ -642,7 +589,6 @@ end associate
    if (profile) call timer%deallocate
    if(allocated(S))         deallocate(S)
    if(allocated(H))         deallocate(H)
-   if(allocated(H0))        deallocate(H0)
    if(allocated(X))         deallocate(X)
    if(allocated(H1))        deallocate(H1)
    if(allocated(kcnao))     deallocate(kcnao)
@@ -654,73 +600,53 @@ end subroutine peeq
 ! -----------------------------------------------------------------------
 !  Calculate D4 dispersion gradient
 ! -----------------------------------------------------------------------
-subroutine ddisp_peeq(mol,env,param,cn,dcndr,dcndL,grd,ed,gd,sigma)
+subroutine ddisp_peeq(env, mol, neighList, param, cn, dcndr, dcndL, ed, gd, sigma)
    use xtb_mctc_accuracy, only : wp
-   ! -----------------------------------------------------------------------
-   !  Type definitions
-   ! -----------------------------------------------------------------------
    use xtb_type_molecule
    use xtb_type_environment
    use xtb_type_wavefunction
    use xtb_type_basisset
    use xtb_type_param
    use xtb_type_data
-   ! -----------------------------------------------------------------------
-   !  DFT-D4 definitions and PBC definitions
-   ! -----------------------------------------------------------------------
    use xtb_disp_dftd4
    use xtb_eeq
-   use xtb_pbc,    only : get_realspace_cutoff
+   use xtb_pbc, only : get_realspace_cutoff
    use xtb_disp_ncoord
-   implicit none
 
    character(len=*), parameter :: source = 'peeq_ddisp'
 
-   ! -----------------------------------------------------------------------
-   !  Intent IN
-   ! -----------------------------------------------------------------------
-   type(TMolecule),           intent(in)     :: mol
-   type(scc_parameter),         intent(in)     :: param
-   type(dftd_parameter)                        :: par
-   type(chrg_parameter)                        :: chrgeq
+   type(TMolecule), intent(in) :: mol
+   type(scc_parameter), intent(in) :: param
+   class(TNeighbourList), intent(in) :: neighList
+   type(dftd_parameter) :: par
+   type(chrg_parameter) :: chrgeq
    type(TEnvironment), intent(inout) :: env
-   ! EEQ partial charges and derivatives
-   real(wp), dimension(mol%n),        intent(in) :: cn
-   real(wp), dimension(3,mol%n,mol%n),intent(in) :: dcndr
-   real(wp), dimension(3,3,mol%n),    intent(in) :: dcndL
+   real(wp), intent(in) :: cn(:)
+   real(wp), intent(in) :: dcndr(:,:,:)
+   real(wp), intent(in) :: dcndL(:,:,:)
 
-   ! -----------------------------------------------------------------------
-   !  Intent INOUT
-   ! -----------------------------------------------------------------------
-   ! dispersion energy and derivative
-   real(wp),                     intent(inout) :: ed
-   real(wp), dimension(3,mol%n), intent(inout) :: gd
-   real(wp), dimension(3,3),     intent(inout) :: sigma
+   real(wp), intent(inout) :: ed
+   real(wp), intent(inout) :: gd(:,:)
+   real(wp), intent(inout) :: sigma(:,:)
 
-   !--- allocatables
-   real(wp),allocatable, dimension(:,:)   :: sdum
-   real(wp),allocatable, dimension(:,:)   :: gdum
-   real(wp),allocatable, dimension(:)     :: q
-   real(wp),allocatable, dimension(:,:,:) :: dqdr
-   real(wp),allocatable, dimension(:,:,:) :: dqdL
-   real(wp),allocatable, dimension(:)     :: covcn
-   real(wp),allocatable, dimension(:,:,:) :: dcovcndr
-   real(wp),allocatable, dimension(:,:,:) :: dcovcndL
-   real(wp),allocatable, dimension(:,:)   :: c6abns
-   real(wp),allocatable, dimension(:)     :: gw
-   real(wp),allocatable, dimension(:,:)   :: gdummy
+   real(wp), allocatable :: sdum(:,:)
+   real(wp), allocatable :: gdum(:,:)
+   real(wp), allocatable :: q(:)
+   real(wp), allocatable :: dqdr(:,:,:)
+   real(wp), allocatable :: dqdL(:,:,:)
+   real(wp), allocatable :: covcn(:)
+   real(wp), allocatable :: dcovcndr(:,:,:)
+   real(wp), allocatable :: dcovcndL(:,:,:)
+   real(wp), allocatable :: c6abns(:,:)
+   real(wp), allocatable :: gw(:)
+   real(wp), allocatable :: gdummy(:,:)
 
-   ! -----------------------------------------------------------------------
-   !  Variables
-   ! -----------------------------------------------------------------------
-   integer               :: i,j,k,l,m
-   integer               :: ndim
-   integer               :: mbd
-   logical, intent(in)   :: grd
-   integer, dimension(3) :: rep_vdw,rep_cn
-   ! real space cutoffs
-   real(wp), parameter   :: cn_thr = 1600.0_wp
-   real(wp), parameter   :: crit_vdw         = 4000.0_wp
+   integer :: i,j,k,l,m
+   integer :: ndim
+   integer :: mbd
+   integer :: rep_vdw(3), rep_cn(3)
+   real(wp), parameter :: cn_thr = 1600.0_wp
+   real(wp), parameter :: crit_vdw = 4000.0_wp
 
    ! damping variable
    real(wp) :: edum
@@ -729,22 +655,16 @@ subroutine ddisp_peeq(mol,env,param,cn,dcndr,dcndL,grd,ed,gd,sigma)
    real(wp) :: expterm
    logical :: exitRun
 
-   ! -----------------------------------------------------------------------
    !  Initialization
-   ! -----------------------------------------------------------------------
    ed  = 0.0_wp
    mbd = 0
 
-   ! -----------------------------------------------------------------------
    !  Get ndim
-   ! -----------------------------------------------------------------------
    call d4dim(mol%n,mol%at,ndim)
    if (mol%npbc > 0) &
       call get_realspace_cutoff(mol%lattice,crit_vdw,rep_vdw)
 
-   ! -----------------------------------------------------------------------
    !  Get memory
-   ! -----------------------------------------------------------------------
    allocate(c6abns(ndim,ndim));   c6abns = 0.0_wp
    allocate(gw(ndim));                gw = 0.0_wp
    allocate(q(mol%n));                 q = 0.0_wp
@@ -769,16 +689,12 @@ subroutine ddisp_peeq(mol,env,param,cn,dcndr,dcndL,grd,ed,gd,sigma)
 
    if (mol%npbc > 0) then
       call get_d4_cn(mol,covcn,dcovcndr,dcovcndL,thr=cn_thr)
-      !else
-      !call dncoord_d4(mol%n,mol%at,mol%xyz,covcn,dcovcndr,cn_thr)
    endif
 
    ! setup c6abns with diagonal terms: i interaction with its images
    call pbc_d4(mol%n,ndim,mol%at,param%wf,param%g_a,param%g_c,covcn,gw,c6abns)
 
-   ! -----------------------------------------------------------------------
    !  Set dispersion parameters and calculate Edisp or Gradient
-   ! -----------------------------------------------------------------------
    if (mol%npbc > 0) then
       call dispgrad_3d(mol,ndim,q,covcn,dcovcndr,dcovcndL,rep_vdw,rep_vdw,crit_vdw,crit_vdw, &
          &             param%disp,param%wf,param%g_a,param%g_c,c6abns,mbd, &
@@ -790,114 +706,8 @@ subroutine ddisp_peeq(mol,env,param,cn,dcndr,dcndL,grd,ed,gd,sigma)
          &          gd,ed,dqdr)
    endif
 
-   ! -----------------------------------------------------------------------
-   !  Free willy (no this is not ORCA)
-   ! -----------------------------------------------------------------------
-   if(allocated(c6abns))  deallocate(c6abns)
-   if(allocated(gw))      deallocate(gw)
-   if(allocated(covcn))    deallocate(covcn)
-   if(allocated(dcovcndr)) deallocate(dcovcndr)
-   if(allocated(dcovcndL)) deallocate(dcovcndL)
-   if(allocated(q))       deallocate(q)
-   if(allocated(dqdr))    deallocate(dqdr)
-   if(allocated(dqdL))    deallocate(dqdL)
 end subroutine ddisp_peeq
 
-! repulsion
-pure subroutine drep_grad(mol,param,erep,g,sigma)
-   use xtb_aoparam,   only : rep,en
-   use xtb_type_molecule
-   use xtb_type_param
-   use xtb_pbc_tools
-   use xtb_pbc
-   implicit none
-   ! intent in
-   type(scc_parameter), intent(in) :: param
-   type(TMolecule),   intent(in) :: mol
-   ! intent inout
-   real(wp), intent(inout), dimension(3,mol%n) :: g
-   real(wp), intent(inout), dimension(3,3)     :: sigma
-   ! intent out
-   real(wp), intent(out)                   :: erep
-   ! local variables
-   integer :: i,j,k,lin
-   integer :: iat,jat,ati,atj
-   real(wp), dimension(3) :: ri,dr
-   real(wp), dimension(3) :: rij
-   real(wp)               :: r2,r,r2top34,r2top34top2
-   real(wp)               :: den2,den4
-   real(wp)               :: alpha
-   real(wp)               :: repab
-   real(wp)               :: expterm
-   real(wp)               :: dtmp
-   real(wp), parameter    :: rthr = 1600.0_wp
-   real(wp)               :: w,t(3)
-   integer                :: latrep(3),tx,ty,tz
-   call get_realspace_cutoff(mol%lattice,rthr,latrep)
-   w = 1.0_wp
-   ! initialize
-   erep = 0.0_wp
-   if (mol%npbc > 0) then
-      do i = 1, mol%n
-         ati=mol%at(i)
-         do j = 1, i
-            do concurrent(tx = -latrep(1):latrep(1), &
-                  &       ty = -latrep(2):latrep(2), &
-                  &       tz = -latrep(3):latrep(3), &
-                  &       i.ne.j .or. (tx.ne.0 .or. ty.ne.0 .or. tz.ne.0))
-               t = [tx,ty,tz]
-               rij = mol%xyz(:,i) - (mol%xyz(:,j) + matmul(mol%lattice,t))
-               r2 = sum(rij**2)
-               if(r2.gt.rthr) cycle
-               atj=mol%at(j)
-               r = sqrt(r2)
-               den2 = (en(ati) - en(atj))**2
-               den4 = den2**2
-               alpha=sqrt(rep(1,ati)*rep(1,atj))&
-                  *(1.0_wp+(0.01_wp*den2+0.01_wp*den4)*param%xbrad)
-               repab = rep(2,ati)*rep(2,atj)
-               r2top34 = r2**0.75_wp
-               r2top34top2 = r2top34**2
-               expterm = exp(-alpha*r2top34)*repab
-               ! save repulsion energy
-               erep = erep + expterm/r * w
-               ! save repulsion gradient
-               dtmp = expterm*(1.5_wp*alpha*r2top34 + 1)/r2top34top2 * w
-               g(:,i) = g(:,i) - dtmp*rij
-               g(:,j) = g(:,j) + dtmp*rij
-               sigma = sigma - dtmp*outer_prod_3x3(rij,rij)
-            enddo ! k WSC partner
-         enddo ! j atom
-      enddo ! i atom
-   else
-      do i = 1, mol%n
-         ati=mol%at(i)
-         do j = 1, i-1
-            rij = mol%xyz(:,i) - mol%xyz(:,j)
-            r2 = sum(rij**2)
-            if(r2.gt.rthr) cycle
-            atj=mol%at(j)
-            r = sqrt(r2)
-            den2 = (en(ati) - en(atj))**2
-            den4 = den2**2
-            alpha=sqrt(rep(1,ati)*rep(1,atj))&
-               *(1.0_wp+(0.01_wp*den2+0.01_wp*den4)*param%xbrad)
-            repab = rep(2,ati)*rep(2,atj)
-            r2top34 = r2**0.75_wp
-            r2top34top2 = r2top34**2
-            expterm = exp(-alpha*r2top34)*repab
-            ! save repulsion energy
-            erep = erep + expterm/r
-            ! save repulsion gradient
-            dtmp = expterm*(1.5_wp*alpha*r2top34 + 1)&
-               /r2top34top2
-            g(:,i) = g(:,i) - dtmp*rij
-            g(:,j) = g(:,j) + dtmp*rij
-         enddo ! j atom
-      enddo ! i atom
-   endif
-
-end subroutine drep_grad
 
 ! short-ranged bond correction
 pure subroutine dsrb_grad(mol,param,cn,dcndr,dcndL,esrb,g,sigma)
