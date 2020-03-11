@@ -94,11 +94,12 @@ module subroutine gfn0_calculation &
    ! -> all atoms are inside the unit cell, all data is set and consistent
 
    call init(latp, env, mol, 60.0_wp)  ! Fixed cutoff
-   call latp%getLatticePoints(latticePoint, 40.0_wp)
+   call latp%getLatticePoints(latticePoint, 60.0_wp)
    call init(neighList, len(mol))
-   call neighList%generate(env, mol%xyz, 40.0_wp, latticePoint, .false.)
+   call neighList%generate(env, mol%xyz, 60.0_wp, latticePoint, .false.)
    call init(wsCell, len(mol))
    call wsCell%generate(env, mol%xyz, 40.0_wp, latticePoint, .false.)
+   deallocate(latticePoint)
 
    wfn%nel = nint(sum(mol%z) - mol%chrg)
    wfn%nopen = mol%uhf

@@ -21,6 +21,7 @@ module xtb_eeq
    use xtb_mctc_constants
    use xtb_type_environment, only : TEnvironment
    use xtb_gfn0param, alp => alpg
+   use xtb_xtb_ewald
    implicit none
 
    public :: eeq_chrgeq
@@ -82,16 +83,30 @@ subroutine get_coulomb_matrix_3d(mol, chrgeq, cf, amat)
    integer, parameter :: ewaldCutD(3) = 2
    integer, parameter :: ewaldCutR(3) = 2
    real(wp), parameter :: zero(3) = 0.0_wp
-   integer :: iat, jat, wscAt
-   real(wp) :: gamii, gamij, riw(3)
+   real(wp), allocatable :: recPoint(:, :)
+   integer :: iat, jat, wscAt, iG1, iG2, iG3, iRp
+   real(wp) :: gamii, gamij, riw(3), gVec(3)
+   iRp = 0
+   allocate(recPoint(3, product(2*ewaldCutR+1)-1))
+   do iG1 = -ewaldCutR(1), ewaldCutR(1)
+      do iG2 = -ewaldCutR(2), ewaldCutR(2)
+         do iG3 = -ewaldCutR(3), ewaldCutR(3)
+            if (iG1 == 0 .and. iG2 == 0 .and. iG3 == 0) cycle
+            iRp = iRp + 1
+            gVec(:) = [iG1, iG2, iG3]
+            recPoint(:, iRp) = matmul(mol%rec_lat, gVec)
+         end do
+      end do
+   end do
+
    amat = 0.0_wp
    !$omp parallel do default(none) schedule(runtime) reduction(+:amat) &
-   !$omp shared(mol, chrgeq, cf) private(jat, wscAt, gamii, gamij, riw)
+   !$omp shared(mol, chrgeq, cf, recPoint) private(jat, wscAt, gamii, gamij, riw)
    do iat = 1, len(mol)
       gamii = 1.0_wp/(sqrt(2.0_wp)*chrgeq%alpha(iat))
       amat(iat, iat) = chrgeq%gam(iat) + sqrt2pi/chrgeq%alpha(iat) &
          ! reciprocal for 0th atom
-         + eeq_ewald_3d_rec(zero,ewaldCutR,mol%rec_lat,mol%volume,cf) &
+         + ewaldMatPBC3D(zero, recPoint, 0.0_wp, mol%volume, cf, 1.0_wp) &
          ! direct for 0th atom
          + eeq_ewald_3d_dir(zero,ewaldCutD,mol%lattice,gamii,cf)
       do jat = 1, iat-1
@@ -101,7 +116,7 @@ subroutine get_coulomb_matrix_3d(mol, chrgeq, cf, amat)
                &  - matmul(mol%lattice,mol%wsc%lattr(:,wscAt,jat,iat))
             amat(iat,jat) = Amat(iat,jat) + mol%wsc%w(jat,iat) * ( &
                ! reciprocal lattice sums
-               + eeq_ewald_3d_rec(riw,ewaldCutR,mol%rec_lat,mol%volume,cf) &
+               + ewaldMatPBC3D(riw, recPoint, 0.0_wp, mol%volume, cf, 1.0_wp) &
                ! direct lattice sums
                + eeq_ewald_3d_dir(riw,ewaldCutD,mol%lattice,gamij,cf))
          end do
@@ -159,11 +174,29 @@ subroutine get_coulomb_derivs_3d(mol, chrgeq, qvec, cf, amatdr, amatdL, atrace)
    real(wp), parameter :: zero(3) = 0.0_wp
    integer :: iat, jat, wscAt, ii
    real(wp) :: gamij, dG(3), dS(3, 3), riw(3)
+   real(wp), allocatable :: recPoint(:, :)
+   integer :: iG1, iG2, iG3, iRp
+   real(wp) :: gVec(3)
+   real(wp), parameter :: unity(3, 3) = reshape(&
+      & [1.0_wp, 0.0_wp, 0.0_wp, 0.0_wp, 1.0_wp, 0.0_wp, 0.0_wp, 0.0_wp, 1.0_wp], &
+      & [3, 3])
+   iRp = 0
+   allocate(recPoint(3, product(2*ewaldCutR+1)-1))
+   do iG1 = -ewaldCutR(1), ewaldCutR(1)
+      do iG2 = -ewaldCutR(2), ewaldCutR(2)
+         do iG3 = -ewaldCutR(3), ewaldCutR(3)
+            if (iG1 == 0 .and. iG2 == 0 .and. iG3 == 0) cycle
+            iRp = iRp + 1
+            gVec(:) = [iG1, iG2, iG3]
+            recPoint(:, iRp) = matmul(mol%rec_lat, gVec)
+         end do
+      end do
+   end do
    amatdr = 0.0_wp
    amatdL = 0.0_wp
    atrace = 0.0_wp
    !$omp parallel do default(none) schedule(runtime) &
-   !$omp reduction(+:atrace,amatdr,amatdL) shared(mol, chrgeq, qvec, cf) &
+   !$omp reduction(+:atrace,amatdr,amatdL) shared(mol, chrgeq, qvec, cf, recPoint) &
    !$omp private(iat, jat, ii, wscAt, riw, gamij, dG, dS)
    do iat = 1, len(mol)
       do jat = 1, iat-1
@@ -172,10 +205,8 @@ subroutine get_coulomb_derivs_3d(mol, chrgeq, qvec, cf, amatdr, amatdL, atrace)
          do wscAt = 1, mol%wsc%itbl(jat,iat)
             riw = mol%xyz(:,iat) - mol%xyz(:,jat) &
                &  - matmul(mol%lattice,mol%wsc%lattr(:,wscAt,jat,iat))
-            call eeq_ewald_dx_3d_rec(riw,ewaldCutR,mol%rec_lat,mol%volume,cf, &
-               &                     dG,dS)
-            dG = dG*mol%wsc%w(jat,iat)
-            dS = dS*mol%wsc%w(jat,iat)
+            call ewaldDerivPBC3D(riw, recPoint, 0.0_wp, mol%volume, cf, &
+               & mol%wsc%w(jat,iat), dG, dS)
             amatdr(:, iat, jat) = amatdr(:, iat, jat) + dG*qvec(iat)
             amatdr(:, jat, iat) = amatdr(:, jat, iat) - dG*qvec(jat)
             atrace(:, iat) = atrace(:, iat) + dG*qvec(jat)
@@ -196,15 +227,11 @@ subroutine get_coulomb_derivs_3d(mol, chrgeq, qvec, cf, amatdr, amatdL, atrace)
       enddo     ! jat
 
       gamij = 1.0_wp/(sqrt(2.0_wp)*chrgeq%alpha(iat))
-      call eeq_ewald_dx_3d_rec(zero, ewaldCutR, mol%rec_lat, mol%volume, cf, &
-         &                     dG, dS)
+      call ewaldDerivPBC3D(zero, recPoint, 0.0_wp, mol%volume, cf, 1.0_wp, dG, dS)
       amatdL(:, :, iat) = amatdL(:, :, iat) + dS*qvec(iat)
       call eeq_ewald_dx_3d_dir(zero, ewaldCutD, mol%lattice, gamij, cf, &
          &                     dG, dS)
-      amatdL(:, :, iat) = amatdL(:, :, iat) + dS*qvec(iat)
-      do ii = 1, 3
-         amatdL(ii, ii, iat) = amatdL(ii, ii, iat) + cf/sqrtpi/3.0_wp*qvec(iat)
-      enddo
+      amatdL(:, :, iat) = amatdL(:, :, iat) + (dS+unity*cf/sqrtpi/3.0_wp)*qvec(iat)
    enddo
    !$omp end parallel do
 end subroutine get_coulomb_derivs_3d
@@ -953,70 +980,6 @@ pure subroutine eeq_ewald_dx_3d_dir(riw,rep,dlat,gamij,cf,dAmat,sigma)
 
 end subroutine eeq_ewald_dx_3d_dir
 
-pure function eeq_ewald_3d_rec(riw,rep,rlat,vol,cf) result(Amat)
-   use xtb_mctc_constants
-   implicit none
-   real(wp),intent(in) :: riw(3)    !< distance from i to WSC atom
-   integer, intent(in) :: rep(3)    !< images to consider
-   real(wp),intent(in) :: rlat(3,3) !< reciprocal lattice
-   real(wp),intent(in) :: vol       !< direct cell volume
-   real(wp),intent(in) :: cf        !< convergence factor
-   real(wp) :: Amat                 !< element of interaction matrix
-   integer  :: dx,dy,dz
-   real(wp) :: rik2,rik(3)
-   real(wp) :: t(3)
-   Amat = 0.0_wp
-   do concurrent(dx = -rep(1):rep(1), &
-         &       dy = -rep(2):rep(2), &
-         &       dz = -rep(3):rep(3))
-      if (dx==0 .and. dy==0 .and. dz==0) cycle
-      t = [dx,dy,dz]
-      rik = matmul(rlat,t)
-      rik2 = dot_product(rik,rik)
-      Amat=Amat + cos(dot_product(rik,riw) ) * 4.0_wp*pi/vol &
-         * exp(-rik2/(4.0_wp*cf**2))/rik2
-   end do
-end function eeq_ewald_3d_rec
-
-pure subroutine eeq_ewald_dx_3d_rec(riw,rep,rlat,vol,cf,dAmat,sigma)
-   use xtb_mctc_constants
-   use xtb_pbc_tools
-   implicit none
-   real(wp),intent(in) :: riw(3)    !< distance from i to WSC atom
-   integer, intent(in) :: rep(3)    !< images to consider
-   real(wp),intent(in) :: rlat(3,3) !< reciprocal lattice
-   real(wp),intent(in) :: vol       !< direct cell volume
-   real(wp),intent(in) :: cf        !< convergence factor
-   real(wp),intent(out) :: dAmat(3) !< element of interaction matrix
-   real(wp),intent(out) :: sigma(3,3)
-   integer  :: dx,dy,dz
-   real(wp) :: rik2,rik(3)
-   real(wp) :: t(3),dtmp,fpivol
-   real(wp) :: expterm,arg
-   integer  :: i
-   dAmat = 0.0_wp
-   sigma = 0.0_wp
-   fpivol = 4.0_wp*pi/vol
-   do concurrent(dx = -rep(1):rep(1), &
-         &       dy = -rep(2):rep(2), &
-         &       dz = -rep(3):rep(3))
-      if (dx==0 .and. dy==0 .and. dz==0) cycle
-      t = [dx,dy,dz]
-      rik = matmul(rlat,t)
-      rik2 = dot_product(rik,rik)
-      expterm = exp(-rik2/(4.0_wp*cf**2))/rik2
-      arg = dot_product(rik,riw)
-      ! d/dx (sin**2 + cos**2) = -2*sin*cos - 2*cos*sin
-      dtmp = -sin(arg) * expterm * fpivol
-      dAmat = dAmat + rik*dtmp
-      sigma = sigma + fpivol * expterm * cos(arg) * (&
-         & reshape([-1.0_wp, 0.0_wp, 0.0_wp, &
-         &           0.0_wp,-1.0_wp, 0.0_wp, &
-         &           0.0_wp, 0.0_wp,-1.0_wp],shape(sigma)) &
-         & * (1.0_wp + rik2/(4.0_wp*cf**2)*2.0_wp/3.0_wp) &
-         & + (2.0_wp/rik2 + 0.5_wp/cf**2) * outer_prod_3x3(rik,rik))
-   end do
-end subroutine eeq_ewald_dx_3d_rec
 
 ! ======================================================================
 !  Modified Version of eeq_chrgeq routine that reads also the chrgeq construct

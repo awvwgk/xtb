@@ -29,6 +29,7 @@ program XTBprog
    use xtb_mctc_systools
    use xtb_mctc_convert
    use xtb_mctc_param
+   use xtb_mctc_math
 
 !! ========================================================================
 !  class and type definitions
@@ -73,6 +74,7 @@ program XTBprog
    use tbmod_output_writer
    use xtb_restart
    use xtb_readparam
+   use xtb_pbc_tools
 
 !! ========================================================================
 !  get interfaces for methods used in this part
@@ -162,12 +164,12 @@ program XTBprog
 !! ========================================================================
 !  debugging variables for numerical gradient
    logical, parameter    :: gen_param = .false.
-   logical, parameter    :: debug = .false.
+   logical, parameter    :: debug = .true.
    type(TWavefunction) :: wf0
    real(wp),allocatable  :: coord(:,:),numg(:,:),gdum(:,:)
-   real(wp) :: sdum(3,3)
+   real(wp) :: sdum(3,3), invlat(3,3), latgrad(3,3)
    real(wp),parameter    :: step = 0.00001_wp, step2 = 0.5_wp/step
-   real(wp) :: er,el
+   real(wp) :: er,el,stmp(3,3),numsigma(3,3),numlatgrad(3,3)
    logical  :: coffee ! if debugging gets really though, get a coffee
 
 !! ------------------------------------------------------------------------
@@ -428,7 +430,7 @@ program XTBprog
    !> Setup neighbour list
    write(env%unit, '(" * Setup neighbour list",t40,"...")', advance='no')
    call init(calc%neighList, len(mol))
-   call calc%neighList%generate(env, mol%xyz, 40.0_wp, latticePoint, .false.)
+   call calc%neighList%generate(env, mol%xyz, 60.0_wp, latticePoint, .false.)
 
    write(env%unit, '(i10,1x,"images")') size(calc%neighList%image)
 
@@ -707,6 +709,49 @@ program XTBprog
    print *, numg
    print'(/,"difference gradient")'
    print*,g-numg
+
+   if (mol%npbc > 0) then
+      invlat = matInv3x3(mol%lattice)
+      call sigma_to_latgrad(sigma,invlat,latgrad)
+      print*
+      print'(/,"analytical lattice gradient")'
+      print *, latgrad
+      call xyz_to_abc(mol%n,mol%lattice,mol%xyz,coord,mol%pbc)
+      do i = 1, 3
+         do j = 1, 3
+            mol%lattice(j,i) = mol%lattice(j,i) + step
+            !mol%xyz = matmul(mol%lattice,coord)
+            call abc_to_xyz(mol%n,mol%lattice,coord,mol%xyz)
+            call singlepoint &
+               &       (env,mol,wfn,calc, &
+               &        egap,etemp,maxscciter,0,.true.,.true.,acc,er,gdum,sdum,res)
+            mol%lattice(j,i) = mol%lattice(j,i) - 2*step
+            call abc_to_xyz(mol%n,mol%lattice,coord,mol%xyz)
+            call singlepoint &
+               &       (env,mol,wfn,calc, &
+               &        egap,etemp,maxscciter,0,.true.,.true.,acc,el,gdum,sdum,res)
+            mol%lattice(j,i) = mol%lattice(j,i) + step
+            call abc_to_xyz(mol%n,mol%lattice,coord,mol%xyz)
+            numlatgrad(j,i) = step2 * (er - el)
+         enddo
+      enddo
+      !mol%xyz = matmul(mol%lattice,coord)
+      call abc_to_xyz(mol%n,mol%lattice,coord,mol%xyz)
+      call mol%update
+      call latgrad_to_sigma(numlatgrad,mol%lattice,numsigma)
+      print'(/,"numerical lattice gradient")'
+      print *, numlatgrad
+      print'(/,"difference lattice gradient")'
+      print*,latgrad-numlatgrad
+      print*
+      print'(/,"analytical sigma tensor")'
+      print *, sigma
+      print'(/,"numerical sigma tensor")'
+      print *, numsigma
+      print'(/,"difference sigma tensor")'
+      print*,sigma-numsigma
+   endif
+
    endif
 
 !! ========================================================================

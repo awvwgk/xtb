@@ -104,6 +104,7 @@ module subroutine gfn1_calculation &
    call neighList%generate(env, mol%xyz, 40.0_wp, latticePoint, .false.)
    call init(wsCell, len(mol))
    call wsCell%generate(env, mol%xyz, 40.0_wp, latticePoint, .false.)
+   deallocate(latticePoint)
 
    wfn%nel = nint(sum(mol%z) - mol%chrg)
    wfn%nopen = mol%uhf

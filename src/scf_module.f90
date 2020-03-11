@@ -31,6 +31,9 @@ module xtb_scf
    use xtb_setparam
    use xtb_xtb_coulomb
    use xtb_xtb_repulsion, only : repulsionEnGrad1, repulsionEnGrad2
+   use xtb_disp_dftd3, only : d3_gradient
+   use xtb_disp_coordinationnumber, only : getCoordinationNumber, cnType
+   use xtb_param_sqrtzr4r2, only : sqrtZr4r2
    implicit none
    private
 
@@ -133,7 +136,8 @@ subroutine scf(env, mol, wfn, basis, param, pcem, neighList, wsCell, &
    integer,allocatable :: matlist2(:,:)
    integer,allocatable :: xblist(:,:)
    real(wp),allocatable :: sqrab(:)
-   real(wp),allocatable :: dcn(:,:,:)
+   real(wp),allocatable :: dcndr(:,:,:)
+   real(wp),allocatable :: dcndL(:,:,:)
    !> Number of neighbours for each atom up to a certain cutoff radius.
    integer, allocatable :: neighs(:)
    real(wp), allocatable :: gam2sh(:)
@@ -258,7 +262,8 @@ subroutine scf(env, mol, wfn, basis, param, pcem, neighList, wsCell, &
 !ccccccccccccccccccc
 
 !  # atom arrays
-   allocate(qq(mol%n),qlmom(3,mol%n),cm5(mol%n),sqrab(mol%n*(mol%n+1)/2),dcn(3,mol%n,mol%n),cn(mol%n))
+   allocate(qq(mol%n),qlmom(3,mol%n),cm5(mol%n),sqrab(mol%n*(mol%n+1)/2), &
+      & dcndr(3,mol%n,mol%n),cn(mol%n),dcndL(3,3,mol%n))
    allocate(neighs(len(mol)), source=0)
 
 !  initialize the GBSA module (GBSA works with CM5 charges)
@@ -448,7 +453,7 @@ subroutine scf(env, mol, wfn, basis, param, pcem, neighList, wsCell, &
    else
       allocate( hdisp(mol%n), source=0.0_wp )
       ! D3 part first because we need CN
-      call dncoord_d3(mol%n,mol%at,mol%xyz,cn,dcn)
+      call dncoord_d3(mol%n,mol%at,mol%xyz,cn,dcndr)
    endif
 
    if (profile) call timer%measure(2)
@@ -465,7 +470,7 @@ subroutine scf(env, mol, wfn, basis, param, pcem, neighList, wsCell, &
    ! prepare aes stuff
    if(gfn_method.gt.1) then
 !     CN/dCN replaced by special smoother and faster decaying function
-      call dncoord_gfn(mol%n,mol%at,mol%xyz,cn,dcn)
+      call dncoord_gfn(mol%n,mol%at,mol%xyz,cn,dcndr)
 
 !     allocate arrays for lists and fill (to exploit sparsity)
       allocate(mdlst(2,ndp),mqlst(2,nqp))
@@ -562,8 +567,18 @@ subroutine scf(env, mol, wfn, basis, param, pcem, neighList, wsCell, &
       call repulsionEnGrad2(mol, neighs, neighlist, rexp, ep, g, sigma)
    end if
 
-   call cls_grad(mol%n,mol%at,mol%xyz,sqrab,param,rexp,kexp,nxb,ljexp,xblist, &
-      &          ed,exb,ep,g,prlevel)
+   exb=0.0_wp
+   if (gfn_method == 1) then
+      call neighlist%getNeighs(neighs, 40.0_wp)
+      call getCoordinationNumber(mol, neighs, neighList, cnType%exp, &
+         & cn, dcndr, dcndL)
+      call neighlist%getNeighs(neighs, 60.0_wp)
+      call d3_gradient(mol, neighs, neighList, param%disp, 4.0_wp, sqrtZr4r2, &
+         & cn, dcndr, dcndL, ed, g, sigma)
+
+      call xbpot(mol%n,mol%at,mol%xyz,sqrab,xblist,nxb,param%xbdamp,param%xbrad, &
+         & ljexp,exb,g)
+   end if
 
    if (profile) call timer%measure(6)
    if (profile) call timer%measure(4,"zeroth order Hamiltonian")
@@ -878,7 +893,7 @@ subroutine scf_grad(mol,neighList,nmat2,matlist2, &
    integer :: m,i,j,kk
    real(wp),allocatable :: qq(:)
    real(wp),allocatable :: cn(:)
-   real(wp),allocatable :: dcn(:,:,:)
+   real(wp),allocatable :: dcndr(:,:,:)
    real(wp),allocatable :: X(:,:)
    real(wp),allocatable :: H(:,:)
    real(wp),allocatable :: vs(:),vd(:,:),vq(:,:)
@@ -891,7 +906,7 @@ subroutine scf_grad(mol,neighList,nmat2,matlist2, &
 
 !  print'("Allocating local memory")'
    allocate( cn(mol%n), source = 0.0_wp )
-   allocate( dcn(3,mol%n,mol%n), source = 0.0_wp )
+   allocate( dcndr(3,mol%n,mol%n), source = 0.0_wp )
    allocate( H(basis%nao,basis%nao), source = 0.0_wp )
    allocate( X(basis%nao,basis%nao), source = 0.0_wp )
 !  print'("Allocated local memory")'
@@ -907,14 +922,14 @@ subroutine scf_grad(mol,neighList,nmat2,matlist2, &
 !  CN dependent part
 !  print'("Calculating CN dependent derivatives")'
    if (gfn_method.gt.1) then
-      call dncoord_gfn(mol%n,mol%at,mol%xyz,cn,dcn)
+      call dncoord_gfn(mol%n,mol%at,mol%xyz,cn,dcndr)
       call hcn_grad_gfn2(g,mol%n,mol%at,basis%nao,nmat2,matlist2,mol%xyz, &
-           &             param%kspd,param%kmagic,param%kenscal,kcnao,wfn%P,S,dcn, &
+           &             param%kspd,param%kmagic,param%kenscal,kcnao,wfn%P,S,dcndr, &
            &             basis%aoat2,basis%lao2,basis%valao2,basis%hdiag2,basis%aoexp)
    else
-      call dncoord_d3(mol%n,mol%at,mol%xyz,cn,dcn)
+      call dncoord_d3(mol%n,mol%at,mol%xyz,cn,dcndr)
       call hcn_grad_gfn1(g,mol%n,mol%at,basis%nao,nmat2,matlist2,mol%xyz, &
-           &             param%kspd,param%kmagic,param%kenscal,kcnao,wfn%P,S,dcn, &
+           &             param%kspd,param%kmagic,param%kenscal,kcnao,wfn%P,S,dcndr, &
            &             basis%aoat2,basis%lao2,basis%valao2,basis%hdiag2)
    endif
 
@@ -940,11 +955,11 @@ subroutine scf_grad(mol,neighList,nmat2,matlist2, &
          &        basis%caoshell,basis%saoshell,basis%nprim,basis%primcount, &
          &        basis%alp,basis%cont,wfn%p,vs,vd,vq,H,g)
 
-! WARNING: dcn is overwritten on output and now dR0A/dXC,
+! WARNING: dcndr is overwritten on output and now dR0A/dXC,
 !          and index i & j are flipped
-      call dradcn(mol%n,mol%at,cn,param%cn_shift,param%cn_expo,param%cn_rmax,dcn)
+      call dradcn(mol%n,mol%at,cn,param%cn_shift,param%cn_expo,param%cn_rmax,dcndr)
       call aniso_grad(mol%n,mol%at,mol%xyz,wfn%q,wfn%dipm,wfn%qp,param%xbrad,param%xbdamp, &
-           &          radcn,dcn,gab3,gab5,g)
+           &          radcn,dcndr,gab3,gab5,g)
 
    else
 !     wave function terms 2/overlap dependent parts of H
@@ -1001,71 +1016,5 @@ subroutine scf_grad(mol,neighList,nmat2,matlist2, &
 
 end subroutine scf_grad
 
-subroutine cls_grad(n,at,xyz,sqrab, &
-      &             param,rexp,kexp, &
-      &             nxb,ljexp,xblist, &
-      &             ed,exb,ep, &
-      &             g,printlvl)
-
-! ========================================================================
-!  type definitions
-   use xtb_type_param
-
-! ========================================================================
-!  global storage
-   use xtb_aoparam
-   use xtb_setparam
-
-! ========================================================================
-!  interfaces
-   use xtb_scc_core
-   use xtb_grad_core
-
-   implicit none
-
-   type(scc_parameter),  intent(in) :: param
-   integer, intent(in)    :: n
-   integer, intent(in)    :: at(n)
-   real(wp),intent(in)    :: xyz(3,n)
-   real(wp),intent(in)    :: sqrab(n*(n+1)/2)
-   real(wp),intent(inout) :: g(3,n)
-   real(wp),intent(inout) :: ed
-   integer, intent(in)    :: nxb
-   integer, intent(in)    :: xblist(3,nxb+1)
-   real(wp),intent(in)    :: ljexp
-   real(wp),intent(inout) :: exb
-   real(wp),intent(inout) :: ep
-   real(wp),intent(inout) :: rexp
-   real(wp),intent(inout) :: kexp
-   integer, intent(in)    :: printlvl
-
-   real(wp),allocatable :: cn(:)
-   real(wp),allocatable :: dcn(:,:,:)
-   logical :: pr,minpr
-
-!  print'("Entered gradient calculation")'
-
-   minpr = printlvl.gt.0
-   pr = printlvl.gt.1
-
-!  print'("Allocating local memory")'
-   allocate( cn(n), source = 0.0_wp )
-   allocate( dcn(3,n,n), source = 0.0_wp )
-
-!  dispersion (DFT-D type correction)
-!  print'("Calculating dispersion gradient")'
-   if (gfn_method.eq.1) then
-      call gdisp(n,at,xyz,param%disp%a1,param%disp%a2,param%disp%s8,param%disp%s9, &
-      &   ed,g,cn,dcn)
-   endif
-
-! XB or gCP ----------------------------------------------------
-!  print'("Calculating xbond gradient")'
-   exb=0.0_wp
-   if(gfn_method.lt.2) then
-      call xbpot(n,at,xyz,sqrab,xblist,nxb,param%xbdamp,param%xbrad,ljexp,exb,g)
-   endif
-
-end subroutine cls_grad
 
 end module xtb_scf

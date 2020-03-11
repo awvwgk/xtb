@@ -654,6 +654,7 @@ subroutine ddisp_peeq(env, mol, neighList, param, cn, dcndr, dcndL, ed, gd, sigm
    real(wp) :: t8
    real(wp) :: expterm
    logical :: exitRun
+   integer, allocatable :: neighs(:)
 
    !  Initialization
    ed  = 0.0_wp
@@ -665,6 +666,7 @@ subroutine ddisp_peeq(env, mol, neighList, param, cn, dcndr, dcndL, ed, gd, sigm
       call get_realspace_cutoff(mol%lattice,crit_vdw,rep_vdw)
 
    !  Get memory
+   allocate(neighs(mol%n))
    allocate(c6abns(ndim,ndim));   c6abns = 0.0_wp
    allocate(gw(ndim));                gw = 0.0_wp
    allocate(q(mol%n));                 q = 0.0_wp
@@ -687,24 +689,34 @@ subroutine ddisp_peeq(env, mol, neighList, param, cn, dcndr, dcndL, ed, gd, sigm
       return
    end if
 
-   if (mol%npbc > 0) then
-      call get_d4_cn(mol,covcn,dcovcndr,dcovcndL,thr=cn_thr)
-   endif
+   call neighlist%getNeighs(neighs, 40.0_wp)
+   call getCoordinationNumber(mol, neighs, neighList, cnType%cov, &
+      & covcn, dcovcndr, dcovcndL)
+   dcovcndr = -dcovcndr
 
-   ! setup c6abns with diagonal terms: i interaction with its images
-   call pbc_d4(mol%n,ndim,mol%at,param%wf,param%g_a,param%g_c,covcn,gw,c6abns)
+!   if (mol%npbc > 0) then
+!      call get_d4_cn(mol,covcn,dcovcndr,dcovcndL,thr=cn_thr)
+!   endif
+!
+!   ! setup c6abns with diagonal terms: i interaction with its images
+!   call pbc_d4(mol%n,ndim,mol%at,param%wf,param%g_a,param%g_c,covcn,gw,c6abns)
 
    !  Set dispersion parameters and calculate Edisp or Gradient
-   if (mol%npbc > 0) then
-      call dispgrad_3d(mol,ndim,q,covcn,dcovcndr,dcovcndL,rep_vdw,rep_vdw,crit_vdw,crit_vdw, &
-         &             param%disp,param%wf,param%g_a,param%g_c,c6abns,mbd, &
-         &             gd,sigma,ed,dqdr,dqdL)
-   else
-      call dispgrad(mol%n,ndim,mol%at,q,mol%xyz, &
-         &          param%disp,param%wf,param%g_a,param%g_c, &
-         &          c6abns,mbd, &
-         &          gd,ed,dqdr)
-   endif
+   call neighlist%getNeighs(neighs, 60.0_wp)
+   call d4_gradient(mol, neighs, neighs, neighlist, param%disp, param%g_a, &
+      & param%g_c, param%wf, covcn, dcovcndr, dcovcndL, q, dqdr, dqdL, ed, gd, &
+      & sigma)
+
+!   if (mol%npbc > 0) then
+!      call dispgrad_3d(mol,ndim,q,covcn,dcovcndr,dcovcndL,rep_vdw,rep_vdw,crit_vdw,crit_vdw, &
+!         &             param%disp,param%wf,param%g_a,param%g_c,c6abns,mbd, &
+!         &             gd,sigma,ed,dqdr,dqdL)
+!   else
+!      call dispgrad(mol%n,ndim,mol%at,q,mol%xyz, &
+!         &          param%disp,param%wf,param%g_a,param%g_c, &
+!         &          c6abns,mbd, &
+!         &          gd,ed,dqdr)
+!   endif
 
 end subroutine ddisp_peeq
 

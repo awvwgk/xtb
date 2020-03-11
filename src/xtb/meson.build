@@ -17,5 +17,6 @@
 
 srcs += files(
   'coulomb.f90',
+  'ewald.f90',
   'repulsion.f90',
 )
