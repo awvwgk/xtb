@@ -207,7 +207,7 @@ subroutine getLatticePoints(self, latticePoint, cutoff)
    character(len=*), parameter :: source = 'type_latticepoint_getLatticePoints'
 
    !> Instance of the lattice point generator
-   class(TLatticePoint), intent(inout) :: self
+   class(TLatticePoint), intent(in) :: self
 
    !> Translation vectors for all lattice points
    real(wp), allocatable, intent(out) :: latticePoint(:, :)

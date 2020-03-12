@@ -128,8 +128,8 @@ subroutine test_peeq_sp
 
    call mctc_mute
 
-   call peeq(env, mol, wfn, basis, param, neighList, wsCell, hl_gap, et, prlevel, &
-      & lgrad, .true., acc, energy, gradient, sigma, res)
+   call peeq(env, mol, wfn, basis, param, latp, neighList, wsCell, hl_gap, et, &
+      & prlevel, lgrad, .true., acc, energy, gradient, sigma, res)
 
    call assert_close(energy,-7.3577145610880_wp,thr)
    call assert_close(hl_gap, 2.0722850435118_wp,1.0e-4_wp)
@@ -152,8 +152,8 @@ subroutine test_peeq_sp
    gradient = 0.0_wp
    sigma = 0.0_wp
 
-   call peeq(env, mol, wfn, basis, param, neighList, wsCell, hl_gap, et, prlevel, &
-      & lgrad, .false., acc, energy, gradient, sigma, res)
+   call peeq(env, mol, wfn, basis, param, latp, neighList, wsCell, hl_gap, et, &
+      & prlevel, lgrad, .false., acc, energy, gradient, sigma, res)
 
    call assert_close(energy,-7.3515372227159_wp,thr)
    call assert_close(hl_gap, 2.1721883949504_wp,1.0e-4_wp)

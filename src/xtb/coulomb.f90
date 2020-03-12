@@ -444,7 +444,6 @@ subroutine coulomb_derivs_3d_impl(mol, nshell, ash, gam, gav, cf, lqpc, qsh, &
 end subroutine coulomb_derivs_3d_impl
 
 pure subroutine gfn_ewald_dx_3d_rec(riw,rep,rlat,qpc,vol,cf,dG,dS)
-   use mctc_constants
    real(wp),intent(in) :: riw(3)    !< distance from i to WSC atom
    integer, intent(in) :: rep(3)    !< images to consider
    real(wp),intent(in) :: rlat(3,3) !< reciprocal lattice
@@ -481,7 +480,6 @@ pure subroutine gfn_ewald_dx_3d_rec(riw,rep,rlat,qpc,vol,cf,dG,dS)
 end subroutine gfn_ewald_dx_3d_rec
 
 pure subroutine gfn_ewald_dx_3d_dir(riw,rep,dlat,xij,qpc,cf,dG,dS)
-   use mctc_constants
    real(wp),intent(in) :: riw(3)    !< distance from i to WSC atom
    integer, intent(in) :: rep(3)    !< images to consider
    real(wp),intent(in) :: dlat(3,3) !< direct lattice

@@ -100,6 +100,7 @@ module subroutine gfn2_calculation &
 
    call init(latp, env, mol, 60.0_wp)  ! Fixed cutoff
    call latp%getLatticePoints(latticePoint, 40.0_wp)
+   call init(neighList, len(mol))
    call neighList%generate(env, mol%xyz, 40.0_wp, latticePoint, .false.)
    call init(wsCell, len(mol))
    call wsCell%generate(env, mol%xyz, 40.0_wp, latticePoint, .false.)
@@ -184,7 +185,7 @@ module subroutine gfn2_calculation &
    ! ====================================================================
    !  STEP 5: do the calculation
    ! ====================================================================
-   call scf(env,mol,wfn,basis,param,pcem,neighList,wsCell,hl_gap, &
+   call scf(env,mol,wfn,basis,param,pcem,latp,neighList,wsCell,hl_gap, &
       &     opt%etemp,opt%maxiter,opt%prlevel,.false.,opt%grad,opt%acc, &
       &     energy,gradient,res)
 

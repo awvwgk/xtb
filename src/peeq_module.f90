@@ -26,6 +26,7 @@ module xtb_peeq
    use xtb_type_param
    use xtb_type_data
    use xtb_type_timer
+   use xtb_type_latticepoint, only : TLatticePoint
    use xtb_type_neighbourlist, only : TNeighbourList
    use xtb_aoparam
    use xtb_readin
@@ -86,7 +87,7 @@ module xtb_peeq
 
 contains
 
-subroutine peeq(env, mol, wfn, basis, param, neighList, wsCell, &
+subroutine peeq(env, mol, wfn, basis, param, latp, neighList, wsCell, &
       & egap, et, prlevel, grd, ccm, acc, etot, g, sigma, res)
    use xtb_disp_ncoord
 
@@ -96,6 +97,7 @@ subroutine peeq(env, mol, wfn, basis, param, neighList, wsCell, &
    type(TMolecule),  intent(in) :: mol     !< molecular structure infomation
    type(TBasisset),  intent(in) :: basis   !< basis set
    type(scc_parameter),intent(in) :: param   !< method parameters
+   type(TLatticePoint), intent(in) :: latp
    class(TNeighbourList), intent(in) :: neighList
    class(TNeighbourList), intent(in) :: wsCell
    real(wp), intent(in) :: et      !< electronic temperature
@@ -642,11 +644,7 @@ subroutine ddisp_peeq(env, mol, neighList, param, cn, dcndr, dcndL, ed, gd, sigm
    real(wp), allocatable :: gdummy(:,:)
 
    integer :: i,j,k,l,m
-   integer :: ndim
    integer :: mbd
-   integer :: rep_vdw(3), rep_cn(3)
-   real(wp), parameter :: cn_thr = 1600.0_wp
-   real(wp), parameter :: crit_vdw = 4000.0_wp
 
    ! damping variable
    real(wp) :: edum
@@ -660,15 +658,8 @@ subroutine ddisp_peeq(env, mol, neighList, param, cn, dcndr, dcndL, ed, gd, sigm
    ed  = 0.0_wp
    mbd = 0
 
-   !  Get ndim
-   call d4dim(mol%n,mol%at,ndim)
-   if (mol%npbc > 0) &
-      call get_realspace_cutoff(mol%lattice,crit_vdw,rep_vdw)
-
    !  Get memory
    allocate(neighs(mol%n))
-   allocate(c6abns(ndim,ndim));   c6abns = 0.0_wp
-   allocate(gw(ndim));                gw = 0.0_wp
    allocate(q(mol%n));                 q = 0.0_wp
    allocate(dqdr(3,mol%n,mol%n+1)); dqdr = 0.0_wp
    allocate(dqdL(3,3,mol%n+1));     dqdL = 0.0_wp
@@ -694,29 +685,11 @@ subroutine ddisp_peeq(env, mol, neighList, param, cn, dcndr, dcndL, ed, gd, sigm
       & covcn, dcovcndr, dcovcndL)
    dcovcndr = -dcovcndr
 
-!   if (mol%npbc > 0) then
-!      call get_d4_cn(mol,covcn,dcovcndr,dcovcndL,thr=cn_thr)
-!   endif
-!
-!   ! setup c6abns with diagonal terms: i interaction with its images
-!   call pbc_d4(mol%n,ndim,mol%at,param%wf,param%g_a,param%g_c,covcn,gw,c6abns)
-
    !  Set dispersion parameters and calculate Edisp or Gradient
    call neighlist%getNeighs(neighs, 60.0_wp)
    call d4_gradient(mol, neighs, neighs, neighlist, param%disp, param%g_a, &
       & param%g_c, param%wf, covcn, dcovcndr, dcovcndL, q, dqdr, dqdL, ed, gd, &
       & sigma)
-
-!   if (mol%npbc > 0) then
-!      call dispgrad_3d(mol,ndim,q,covcn,dcovcndr,dcovcndL,rep_vdw,rep_vdw,crit_vdw,crit_vdw, &
-!         &             param%disp,param%wf,param%g_a,param%g_c,c6abns,mbd, &
-!         &             gd,sigma,ed,dqdr,dqdL)
-!   else
-!      call dispgrad(mol%n,ndim,mol%at,q,mol%xyz, &
-!         &          param%disp,param%wf,param%g_a,param%g_c, &
-!         &          c6abns,mbd, &
-!         &          gd,ed,dqdr)
-!   endif
 
 end subroutine ddisp_peeq
 

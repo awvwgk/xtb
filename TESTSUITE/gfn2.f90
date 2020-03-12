@@ -97,7 +97,7 @@ subroutine test_gfn2_scc
 
    g = 0.0_wp
 
-   call scf(env,mol,wfn,basis,param,pcem,neighList,wsCell, &
+   call scf(env,mol,wfn,basis,param,pcem,latp,neighList,wsCell, &
       &   egap,et,maxiter,prlevel,restart,lgrad,acc,etot,g,res)
 
    call env%check(exitRun)

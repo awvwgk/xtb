@@ -145,14 +145,14 @@ subroutine singlepoint&
    select case(mode_extrun)
    case default
       call scf &
-         & (env, mol, wfn, calc%basis, calc%param, pcem, calc%neighList, &
-         &  calc%wsCell, egap, et, maxiter, prlevel, restart, lgrad, acc, &
-         &  etot, g, res)
+         & (env, mol, wfn, calc%basis, calc%param, pcem, calc%latp, &
+         &  calc%neighList, calc%wsCell, egap, et, maxiter, prlevel, restart, &
+         &  lgrad, acc, etot, g, res)
 
    case(p_ext_eht)
       call peeq &
-         & (env, mol, wfn, calc%basis, calc%param, calc%neighList, calc%wsCell, &
-         &  egap, et, prlevel, lgrad, ccm, acc, etot, g, sigma, res)
+         & (env, mol, wfn, calc%basis, calc%param, calc%latp, calc%neighList, &
+         &  calc%wsCell, egap, et, prlevel, lgrad, ccm, acc, etot, g, sigma, res)
 
    case(p_ext_qmdff)
       call ff_eg  (mol%n,mol%at,mol%xyz,etot,g)

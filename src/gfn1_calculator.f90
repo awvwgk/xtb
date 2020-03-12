@@ -185,7 +185,7 @@ module subroutine gfn1_calculation &
    ! ====================================================================
    !  STEP 5: do the calculation
    ! ====================================================================
-   call scf(env,mol,wfn,basis,param,pcem,neighList,wsCell,hl_gap, &
+   call scf(env,mol,wfn,basis,param,pcem,latp,neighList,wsCell,hl_gap, &
       &     opt%etemp,opt%maxiter,opt%prlevel,.false.,opt%grad,opt%acc, &
       &     energy,gradient,res)
 

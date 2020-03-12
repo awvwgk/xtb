@@ -114,7 +114,7 @@ subroutine test_gfn0_sp
 
    g = 0.0_wp
 
-   call peeq(env,mol,wfn,basis,param,neighList,wsCell, &
+   call peeq(env,mol,wfn,basis,param,latp,neighList,wsCell, &
       &   egap,et,prlevel,lgrad,.false.,acc,etot,g,sigma,res)
 
    call assert(res%converged)

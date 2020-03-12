@@ -164,7 +164,7 @@ program XTBprog
 !! ========================================================================
 !  debugging variables for numerical gradient
    logical, parameter    :: gen_param = .false.
-   logical, parameter    :: debug = .true.
+   logical, parameter    :: debug = .false.
    type(TWavefunction) :: wf0
    real(wp),allocatable  :: coord(:,:),numg(:,:),gdum(:,:)
    real(wp) :: sdum(3,3), invlat(3,3), latgrad(3,3)

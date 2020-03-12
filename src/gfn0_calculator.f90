@@ -174,7 +174,7 @@ module subroutine gfn0_calculation &
    !  STEP 5: do the calculation
    ! ====================================================================
 
-   call peeq(env,mol,wfn,basis,param,neighList,wsCell,hl_gap, &
+   call peeq(env,mol,wfn,basis,param,latp,neighList,wsCell,hl_gap, &
       & opt%etemp,opt%prlevel,opt%grad,opt%ccm,opt%acc,energy,gradient,sigma,res)
    call env%check(exitRun)
    if (exitRun) then

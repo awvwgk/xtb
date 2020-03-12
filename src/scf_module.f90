@@ -26,6 +26,7 @@ module xtb_scf
    use xtb_type_data
    use xtb_type_timer
    use xtb_type_pcem
+   use xtb_type_latticepoint, only : TLatticePoint
    use xtb_type_neighbourlist, only : TNeighbourList
    use xtb_aoparam
    use xtb_setparam
@@ -45,7 +46,7 @@ module xtb_scf
 
 contains
 
-subroutine scf(env, mol, wfn, basis, param, pcem, neighList, wsCell, &
+subroutine scf(env, mol, wfn, basis, param, pcem, latp, neighList, wsCell, &
       & egap, et, maxiter, prlevel, restart, grd, acc, eel, g, res)
 
 ! ========================================================================
@@ -76,6 +77,7 @@ subroutine scf(env, mol, wfn, basis, param, pcem, neighList, wsCell, &
    type(TBasisset),intent(in) :: basis
    type(scc_parameter),intent(in) :: param
    type(tb_pcem),intent(inout) :: pcem
+   type(TLatticePoint), intent(in) :: latp
    class(TNeighbourList), intent(in) :: neighList
    class(TNeighbourList), intent(in) :: wsCell
    real(wp),intent(inout) :: egap
@@ -106,6 +108,7 @@ subroutine scf(env, mol, wfn, basis, param, pcem, neighList, wsCell, &
    real(wp),allocatable :: cm5(:)
    real(wp),allocatable :: kcnao(:)
    real(wp),allocatable :: Xcao(:,:)
+   real(wp),allocatable :: trans(:,:)
 !  AES stuff
    real(wp),allocatable  :: dpint(:,:),qpint(:,:)
    real(wp),allocatable  :: gab3(:),gab5(:)
@@ -572,8 +575,8 @@ subroutine scf(env, mol, wfn, basis, param, pcem, neighList, wsCell, &
       call neighlist%getNeighs(neighs, 40.0_wp)
       call getCoordinationNumber(mol, neighs, neighList, cnType%exp, &
          & cn, dcndr, dcndL)
-      call neighlist%getNeighs(neighs, 60.0_wp)
-      call d3_gradient(mol, neighs, neighList, param%disp, 4.0_wp, sqrtZr4r2, &
+      call latp%getLatticePoints(trans, 60.0_wp)
+      call d3_gradient(mol, trans, param%disp, 4.0_wp, sqrtZr4r2, 60.0_wp, &
          & cn, dcndr, dcndL, ed, g, sigma)
 
       call xbpot(mol%n,mol%at,mol%xyz,sqrab,xblist,nxb,param%xbdamp,param%xbrad, &
