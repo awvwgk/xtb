@@ -16,10 +16,15 @@
 ! along with xtb.  If not, see <https://www.gnu.org/licenses/>.
 
 !> Generator for Lebedev-Laikov grids.
+!> Adapted for xtb from John Burkardt's portation of Dmitri Laikov's
+!> C implementation of
 !>
 !> V.I. Lebedev, and D.N. Laikov, "A quadrature formula for the sphere of the
 !> 131st algebraic order of accuracy", Doklady Mathematics, Vol. 59, No. 3,
 !> 1999, pp. 477-481.
+!>
+!> The original Fortran source code can be found at
+!> https://people.sc.fsu.edu/~jburkardt/f_src/sphere_lebedev_rule/
 module xtb_solv_lebedev
    use xtb_mctc_accuracy, only : wp
    implicit none

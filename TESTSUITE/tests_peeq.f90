@@ -61,6 +61,11 @@ program peeq_tester
       case('gaussian_0d'); call test_coulomb_gaussian_cluster
       case('gaussian_3d'); call test_coulomb_gaussian_pbc3d
       end select
+   case('solv')
+      select case(sec)
+      case('bornrad'); call test_solv_bornrad
+      case('sasaint'); call test_solv_sasaint
+      end select
    case('eeq_model')
       select case(sec)
       case('water'); call test_eeq_water

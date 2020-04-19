@@ -32,6 +32,7 @@ xtb_test = files(
   'pbc_tools.f90',
   'peeq.f90',
   'repulsion.f90',
+  'solvation.f90',
   'symmetry.f90',
   'tests_peeq.f90',
   'thermo.f90',
@@ -139,6 +140,9 @@ test('DFT-D4: latticepoints', xtb_test, args: ['dftd4', 'pbc3dlatp'], env: xtben
 test('DFT-D4: neighbourlist', xtb_test, args: ['dftd4', 'pbc3dneighs'], env: xtbenv)
 test('DFT-D4: threebody (LP)', xtb_test, args: ['dftd4', 'pbc3datmlatp'], env: xtbenv)
 test('DFT-D4: threebody (NL)', xtb_test, args: ['dftd4', 'pbc3datmneighs'], env: xtbenv)
+
+test('Solvation: Born radii', xtb_test, args: ['solv', 'bornrad'], env: xtbenv)
+test('Solvation: SASA', xtb_test, args: ['solv', 'sasaint'], env: xtbenv)
 
 test('GFN2-xTB: SCC', xtb_test, args: ['gfn2', 'scc'], env: xtbenv)
 test('GFN2-xTB: API', xtb_test, args: ['gfn2', 'api'], env: xtbenv)

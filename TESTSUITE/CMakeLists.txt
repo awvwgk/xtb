@@ -37,6 +37,7 @@ set(tests
   "${dir}/gfnff.f90"
   "${dir}/peeq.f90"
   "${dir}/repulsion.f90"
+  "${dir}/solvation.f90"
   "${dir}/symmetry.f90"
   "${dir}/thermo.f90"
   "${dir}/tbdef_atomlist.f90"
@@ -128,6 +129,8 @@ add_test("DFTD4_latticepoints" ${XTB-TESTER} dftd4 pbc3dlatp)
 add_test("DFTD4_neighbourlist" ${XTB-TESTER} dftd4 pbc3dneighs)
 add_test("DFTD4_threebody_lp" ${XTB-TESTER} dftd4 pbc3datmlatp)
 add_test("DFTD4_threebody_nl" ${XTB-TESTER} dftd4 pbc3datmneighs)
+add_test("Solvation_Born radii" ${XTB-TESTER} solv bornrad)
+add_test("Solvation_SASA" ${XTB-TESTER} solv sasaint)
 add_test("GFN2-xTB_SCC" ${XTB-TESTER} gfn2 scc)
 add_test("GFN2-xTB_API" ${XTB-TESTER} gfn2 api)
 add_test("GFN2-xTB_API_GBSA" ${XTB-TESTER} gfn2 gbsa)
