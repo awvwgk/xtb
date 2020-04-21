@@ -37,6 +37,7 @@ srcs += files(
   'pcem.f90',
   'reader.F90',
   'setvar.f90',
+  'solvation.f90',
   'solvent.f90',
   'timer.f90',
   'topology.f90',

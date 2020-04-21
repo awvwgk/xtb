@@ -234,7 +234,7 @@ pure subroutine getPsi(neighs, neighList, num, rad, rho, psi, dpsidr, dpsidL)
    dpsidr(:, :, :) = 0.0_wp
    dpsidL(:, :, :) = 0.0_wp
 
-   do iat = 1, size(psi)
+   do iat = 1, size(neighs)
       izp = num(iat)
       do ij = 1, neighs(iat)
          img = neighList%ineigh(ij, iat)

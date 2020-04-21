@@ -21,8 +21,11 @@ list(APPEND srcs
   "${dir}/born.f90"
   "${dir}/cm5.f90"
   "${dir}/gbobc.f90"
+  "${dir}/gbsa.f90"
+  "${dir}/gbsaparam.f90"
   "${dir}/lebedev.f90"
   "${dir}/sasa.f90"
+  "${dir}/state.f90"
 )
 
 set(srcs ${srcs} PARENT_SCOPE)

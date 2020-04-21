@@ -19,6 +19,9 @@ srcs += files(
   'born.f90',
   'cm5.f90',
   'gbobc.f90',
+  'gbsa.f90',
+  'gbsaparam.f90',
   'lebedev.f90',
   'sasa.f90',
+  'state.f90',
 )
