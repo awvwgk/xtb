@@ -144,6 +144,7 @@ test('DFT-D4: threebody (NL)', xtb_test, args: ['dftd4', 'pbc3datmneighs'], env:
 test('Solvation: Born radii', xtb_test, args: ['solv', 'bornrad'], env: xtbenv)
 test('Solvation: SASA', xtb_test, args: ['solv', 'sasaint'], env: xtbenv)
 test('Solvation: GBSA', xtb_test, args: ['solv', 'gbsa'], env: xtbenv)
+test('Solvation: ALPB', xtb_test, args: ['solv', 'alpb'], env: xtbenv)
 
 test('GFN2-xTB: SCC', xtb_test, args: ['gfn2', 'scc'], env: xtbenv)
 test('GFN2-xTB: API', xtb_test, args: ['gfn2', 'api'], env: xtbenv)

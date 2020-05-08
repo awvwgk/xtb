@@ -66,6 +66,7 @@ program peeq_tester
       case('bornrad'); call test_solv_bornrad
       case('sasaint'); call test_solv_sasaint
       case('gbsa'); call test_solv_gbsa
+      case('alpb'); call test_solv_alpb
       end select
    case('eeq_model')
       select case(sec)

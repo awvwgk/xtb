@@ -22,6 +22,7 @@ module xtb_solv_gbsa
    use xtb_mctc_blas, only : symv, dot
    use xtb_mctc_convert, only : aatoau
    use xtb_mctc_la, only : contract
+   use xtb_mctc_math, only : matDet3x3, derivDet3x3
    use xtb_param_vdwradd3, only : vanDerWaalsRadD3
    use xtb_solv_born, only : TBornIntegrator, init_ => init
    use xtb_solv_gbsaparam, only : TGBSAData
@@ -66,6 +67,9 @@ module xtb_solv_gbsa
       !> Evaluator for Surface area
       type(TSurfaceIntegrator) :: surface
 
+      !> Analytical linearized Possion Boltzmann factor
+      real(wp) :: alpbet
+
       !> Dielectric scaling
       real(wp) :: kEps
 
@@ -77,6 +81,9 @@ module xtb_solv_gbsa
 
       !> Hydrogen bond strength for each element
       real(wp), allocatable :: hBondStrength(:)
+
+      !> Van-der-Waals radii
+      real(wp), allocatable :: vdwRad(:)
 
       !> Energy contribution from the SASA
       real(wp) :: gsasa
@@ -128,6 +135,9 @@ module xtb_solv_gbsa
    end interface init
 
 
+   !> Parameter for the analytical linearized Possion Boltzmann
+   real(wp), parameter :: alpha = 0.571412_wp
+
    !> P16 zeta parameter
    real(wp), parameter :: zetaP16 = 1.028_wp
 
@@ -143,7 +153,7 @@ contains
 
 !> Initialize GBSA model from parametrisation data
 subroutine initGeneralizedBorn(self, env, input, nAtom, rad, state, temperature, &
-      & cutoff, kernel, num)
+      & cutoff, kernel, alpb, num)
 
    !> Source for the error generation
    character(len=*), parameter :: source = 'solv_gbsa_initGeneralizedBorn'
@@ -175,10 +185,14 @@ subroutine initGeneralizedBorn(self, env, input, nAtom, rad, state, temperature,
    !> Generalized Born kernel
    integer, intent(in), optional :: kernel
 
+   !> Construct an analytical linearized Possion-Boltzmann model instead
+   logical, intent(in), optional :: alpb
+
    !> Atomic numbers for each species
    integer, intent(in), optional :: num(:)
 
    integer :: ii
+   logical :: isALPB
    real(wp) :: intCutoff
 
    self%nAtom = nAtom
@@ -203,12 +217,32 @@ subroutine initGeneralizedBorn(self, env, input, nAtom, rad, state, temperature,
       intCutoff = 35.0_wp*aatoau
    end if
 
+   if (present(alpb)) then
+      isALPB = alpb
+   else
+      isALPB = .false.
+   end if
+
    call init_(self%born, rad, input%descreening, input%bornScale, &
       & input%bornOffset, cutoff=intCutoff, num=num)
 
    call init_(self%surface, env, rad, input%probeRad, num=num)
 
-   self%kEps = 1.0_wp / input%dielectricConst - 1.0_wp
+   if (isALPB) then
+      if (present(num)) then
+         allocate(self%vdwRad(size(num)))
+         do ii = 1, size(num)
+            self%vdwRad(ii) = rad(num(ii))
+         end do
+      else
+         self%vdwRad = rad
+      end if
+      ! β = 1 / ε, we save αβ because they are always used together
+      self%alpbet = alpha / input%dielectricConst
+   else
+      self%alpbet = 0.0_wp
+   end if
+   self%kEps = (1.0_wp / input%dielectricConst - 1.0_wp) / (1.0_wp + self%alpbet)
    if (present(state) .and. present(temperature)) then
       self%freeEnergyShift = input%freeEnergyShift + getStateShift(state, &
          & temperature, input%density, input%molecularMass)
@@ -259,6 +293,7 @@ subroutine update(self, neighList, num, bornRad)
 
    integer :: iat, izp
    real(wp) :: hbterm
+   real(wp) :: aDet
 
    allocate(neighs(self%nAtom))
 
@@ -289,6 +324,11 @@ subroutine update(self, neighList, num, bornRad)
       call getBornMatrixP16(self%nAtom, neighList%coords, self%kEps, &
          & self%bornRad, self%bornMat)
    end select
+
+   if (self%alpbet > 0.0_wp) then
+      call getADet(self%nAtom, neighList%coords, num, self%vdwRad, aDet)
+      self%bornMat = self%bornMat + self%alpbet / aDet
+   end if
 
    if (allocated(self%hBondStrength)) then
       do iat = 1, self%nAtom
@@ -400,6 +440,11 @@ subroutine getGradient(self, neighList, num, qat, qsh, gradient, sigma)
       izp = num(iat)
       gradient(:, :) = gradient + self%dsdr(:, :, iat) * self%surfaceTension(izp)
    end do
+
+   if (self%alpbet > 0.0_wp) then
+      call getADetDeriv(self%nAtom, neighList%coords, num, self%vdwRad, &
+         & self%kEps*self%alpbet, qat, gradient, sigma)
+   end if
 
    if (allocated(self%hBondStrength)) then
       do iat = 1, self%nAtom
@@ -668,6 +713,136 @@ subroutine getBornDerivP16(nAtom, xyz, qVec, kEps, bornRad, dbrdr, dbrdL, &
    !$omp end parallel do
 
 end subroutine getBornDerivP16
+
+
+subroutine getADet(nAtom, xyz, num, rad, aDet)
+
+   !> Number of atoms
+   integer, intent(in) :: nAtom
+
+   !> Cartesian coordinates
+   real(wp), intent(in) :: xyz(:, :)
+
+   !> Species identifiers for each atom
+   integer, intent(in) :: num(:)
+
+   !> Atomic radii
+   real(wp), intent(in) :: rad(:)
+
+   !> Shape descriptor of the structure
+   real(wp), intent(out) :: aDet
+
+   integer :: iat, izp
+   real(wp) :: r2, rad2, rad3, totRad3, vec(3), center(3), inertia(3, 3)
+   real(wp), parameter :: tof = 2.0_wp/5.0_wp, unity(3, 3) = reshape(&
+      & [1.0_wp, 0.0_wp, 0.0_wp, 0.0_wp, 1.0_wp, 0.0_wp, 0.0_wp, 0.0_wp, 1.0_wp], &
+      & [3, 3])
+
+   totRad3 = 0.0_wp
+   center(:) = 0.0_wp
+   do iat = 1, nAtom
+      izp = num(iat)
+      rad2 = rad(izp) * rad(izp)
+      rad3 = rad2 * rad(izp)
+      totRad3 = totRad3 + rad3
+      center(:) = center + xyz(:, iat) * rad3
+   end do
+   center = center / totRad3
+
+   inertia(:, :) = 0.0_wp
+   do iat = 1, nAtom
+      izp = num(iat)
+      rad2 = rad(izp) * rad(izp)
+      rad3 = rad2 * rad(izp)
+      vec(:) = xyz(:, iat) - center
+      r2 = sum(vec**2)
+      inertia(:, :) = inertia + rad3 * ((r2 + tof*rad2) * unity &
+         & - spread(vec, 1, 3) * spread(vec, 2, 3))
+   end do
+
+   aDet = sqrt(matDet3x3(inertia)**(1.0_wp/3.0_wp)/(tof*totRad3))
+
+end subroutine getADet
+
+
+subroutine getADetDeriv(nAtom, xyz, num, rad, kEps, qvec, gradient, sigma)
+
+   !> Number of atoms
+   integer, intent(in) :: nAtom
+
+   !> Cartesian coordinates
+   real(wp), intent(in) :: xyz(:, :)
+
+   !> Species identifiers for each atom
+   integer, intent(in) :: num(:)
+
+   !> Atomic radii
+   real(wp), intent(in) :: rad(:)
+
+   real(wp), intent(in) :: kEps
+   real(wp), intent(in) :: qvec(:)
+
+   !> Molecular gradient
+   real(wp), intent(inout) :: gradient(:, :)
+
+   !> Strain derivatives
+   real(wp), intent(inout) :: sigma(:, :)
+
+   integer :: iat, izp
+   real(wp) :: r2, rad2, rad3, totRad3, vec(3), center(3), inertia(3, 3), aDet
+   real(wp) :: aDeriv(3, 3), qtotal
+   real(wp), parameter :: tof = 2.0_wp/5.0_wp, unity(3, 3) = reshape(&
+      & [1.0_wp, 0.0_wp, 0.0_wp, 0.0_wp, 1.0_wp, 0.0_wp, 0.0_wp, 0.0_wp, 1.0_wp], &
+      & [3, 3])
+
+   qtotal = 0.0_wp
+   totRad3 = 0.0_wp
+   center(:) = 0.0_wp
+   do iat = 1, nAtom
+      izp = num(iat)
+      rad2 = rad(izp) * rad(izp)
+      rad3 = rad2 * rad(izp)
+      totRad3 = totRad3 + rad3
+      center(:) = center + xyz(:, iat) * rad3
+      qtotal = qtotal + qvec(iat)
+   end do
+   center = center / totRad3
+
+   inertia(:, :) = 0.0_wp
+   do iat = 1, nAtom
+      izp = num(iat)
+      rad2 = rad(izp) * rad(izp)
+      rad3 = rad2 * rad(izp)
+      vec(:) = xyz(:, iat) - center
+      r2 = sum(vec**2)
+      inertia(:, :) = inertia + rad3 * ((r2 + tof*rad2) * unity &
+         & - spread(vec, 1, 3) * spread(vec, 2, 3))
+   end do
+
+   aDet = sqrt(matDet3x3(inertia)**(1.0_wp/3.0_wp)/(tof*totRad3))
+   aDeriv(:, :) = reshape([&
+      & inertia(1,1)*(inertia(2,2)+inertia(3,3))-inertia(1,2)**2-inertia(1,3)**2, &
+      & inertia(1,2)*inertia(3,3)-inertia(1,3)*inertia(2,3), &
+      & inertia(1,3)*inertia(2,2)-inertia(1,2)*inertia(3,2), &
+      & inertia(1,2)*inertia(3,3)-inertia(1,3)-inertia(2,3), &
+      & inertia(2,2)*(inertia(1,1)+inertia(3,3))-inertia(1,2)**2-inertia(2,3)**2, &
+      & inertia(1,1)*inertia(2,3)-inertia(1,2)*inertia(1,3), &
+      & inertia(1,3)*inertia(2,2)-inertia(1,2)*inertia(3,2), &
+      & inertia(1,1)*inertia(2,3)-inertia(1,2)*inertia(1,3), &
+      & inertia(3,3)*(inertia(1,1)+inertia(2,2))-inertia(1,3)**2-inertia(2,3)**2],&
+      & shape=[3, 3], order=[2, 1]) &
+      & * 125.0_wp / (48.0_wp * aDet**5 * totRad3**3) &
+      & * (-0.5_wp * kEps * qtotal**2 / aDet**2)
+
+   do iat = 1, nAtom
+      izp = num(iat)
+      rad2 = rad(izp) * rad(izp)
+      rad3 = rad2 * rad(izp)
+      vec(:) = xyz(:, iat) - center
+      gradient(:, iat) = gradient(:, iat) + rad3 * matmul(aDeriv, vec)
+   end do
+
+end subroutine getADetDeriv
 
 
 end module xtb_solv_gbsa
