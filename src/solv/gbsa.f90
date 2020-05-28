@@ -19,9 +19,8 @@
 !> contributions.
 module xtb_solv_gbsa
    use xtb_mctc_accuracy, only : wp
-   use xtb_mctc_blas, only : symv, dot
+   use xtb_mctc_blas, only : mctc_symv, mctc_dot, mctc_gemv
    use xtb_mctc_convert, only : aatoau
-   use xtb_mctc_la, only : contract
    use xtb_mctc_math, only : matDet3x3, derivDet3x3
    use xtb_param_vdwradd3, only : vanDerWaalsRadD3
    use xtb_solv_born, only : TBornIntegrator, init_ => init
@@ -360,8 +359,7 @@ subroutine addShift(self, qat, qsh, atomicShift, shellShift)
    !> Shell-resolved potential shift
    real(wp), intent(inout) :: shellShift(:)
 
-   call symv('l', self%nAtom, 1.0_wp, self%bornMat, self%nAtom, qat, 1, &
-      & 1.0_wp, atomicShift, 1)
+   call mctc_symv(self%bornMat, qat, atomicShift, beta=1.0_wp)
 
 end subroutine addShift
 
@@ -381,9 +379,8 @@ pure subroutine getEnergy(self, qat, qsh, energy)
    !> Third order contribution to the energy
    real(wp), intent(out) :: energy
 
-   call symv('l', self%nAtom, 1.0_wp, self%bornMat, self%nAtom, qat, 1, &
-      & 0.0_wp, self%shift, 1)
-   energy = 0.5_wp * dot(self%nAtom, self%shift, 1, qat, 1) &
+   call mctc_symv(self%bornMat, qat, self%shift)
+   energy = 0.5_wp * mctc_dot(self%shift, qat) &
       & + self%gsasa + self%freeEnergyShift
 
 end subroutine getEnergy
@@ -434,7 +431,7 @@ subroutine getGradient(self, neighList, num, qat, qsh, gradient, sigma)
          & self%bornRad, self%dbrdr, self%dbrdL, djdr, djdtr, djdL)
    end select
 
-   call contract(djdr, qat, gradient, beta=1.0_wp)
+   call mctc_gemv(djdr, qat, gradient, beta=1.0_wp)
 
    do iat = 1, self%nAtom
       izp = num(iat)
