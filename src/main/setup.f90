@@ -23,8 +23,11 @@ module xtb_main_setup
    use xtb_type_dummycalc, only : TDummyCalculator
    use xtb_type_environment, only : TEnvironment
    use xtb_type_molecule, only : TMolecule
+   use xtb_type_neighbourlist, only : init
+   use xtb_type_latticepoint, only : init
    use xtb_type_param, only : TxTBParameter, chrg_parameter
    use xtb_type_wavefunction, only : TWavefunction
+   use xtb_type_wignerseitzcell, only : init
    use xtb_readparam, only : readParam
    use xtb_paramset, only : use_parameterset
    use xtb_basis, only : newBasisset
@@ -41,7 +44,7 @@ module xtb_main_setup
    implicit none
    private
 
-   public :: newCalculator, newWavefunction, addSolvationModel
+   public :: newCalculator, newWavefunction, addSolvationModel, addNeighbourLists
    public :: newXTBCalculator, newGFFCalculator
 
 
@@ -235,7 +238,6 @@ subroutine newGFFCalculator(env, mol, calc, fname, restart, version)
    end if
 
    call calc%topo%zero
-   calc%update = .true.
    ! global accuracy factor similar to acc in xtb used in SCF
    calc%accuracy = 0.1_wp
    if (mol%n > 10000) then
@@ -349,5 +351,41 @@ subroutine addSolvationModel(env, calc, solvent, state, temp, nang)
    endif
 
 end subroutine addSolvationModel
+
+
+subroutine addNeighbourLists(env, calc, mol, cutoff)
+   character(len=*), parameter :: source = 'main_setup_addNeighbourLists'
+   type(TEnvironment), intent(inout) :: env
+   class(TCalculator), intent(inout) :: calc
+   type(TMolecule), intent(in) :: mol
+   real(wp), intent(in) :: cutoff
+   real(wp), allocatable :: trans(:, :)
+   logical :: exitRun
+
+   if (cutoff > 0.0_wp) then
+      call init(calc%latp, env, mol, cutoff)
+
+      call env%check(exitRun)
+      if (exitRun) then
+         call env%error("Failed to setup lattice point generator", source)
+         return
+      end if
+
+      call init(calc%neighList, mol%n)
+      call init(calc%wsCell, mol%n)
+      call calc%latp%getLatticePoints(trans, cutoff)
+
+      call calc%neighList%generate(env, mol%xyz, cutoff, trans, .false.)
+      call calc%wsCell%generate(env, mol%xyz, cutoff, trans, .false.)
+
+      call env%check(exitRun)
+      if (exitRun) then
+         call env%error("Failed to setup neighbour lists", source)
+         return
+      end if
+   end if
+
+end subroutine addNeighbourLists
+
 
 end module xtb_main_setup

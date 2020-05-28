@@ -125,6 +125,9 @@ module xtb_solv_gbsa
       !> Add contributions to the gradient
       procedure :: getGradient
 
+      !> Get realspace cutoff for neighbour lists
+      procedure :: getCutoff
+
    end type TGeneralizedBorn
 
 
@@ -273,7 +276,7 @@ end subroutine initGeneralizedBorn
 
 
 !> Update Born radii and surface area from current geometry
-subroutine update(self, neighList, num, bornRad)
+subroutine update(self, neighList, num)
 
    !> Instance of the solvation model
    class(TGeneralizedBorn), intent(inout) :: self
@@ -283,9 +286,6 @@ subroutine update(self, neighList, num, bornRad)
 
    !> Atomic identifiers
    integer, intent(in) :: num(:)
-
-   !> Born radii
-   real(wp), intent(in), optional :: bornRad(:)
 
    !> Number of neighbours for each atom
    integer, allocatable :: neighs(:)
@@ -305,15 +305,9 @@ subroutine update(self, neighList, num, bornRad)
       self%gsasa = self%gsasa + self%surfaceTension(izp) * self%sasa(iat)
    end do
 
-   if (present(bornRad)) then
-      self%bornRad(:) = bornRad
-      self%dbrdr(:, :, :) = 0.0_wp
-      self%dbrdL(:, :, :) = 0.0_wp
-   else
-      call neighlist%getNeighs(neighs, self%born%cutoff)
-      call self%born%getBornRad(neighs, neighList, num, self%bornRad, self%dbrdr, &
-         & self%dbrdL)
-   end if
+   call neighlist%getNeighs(neighs, self%born%cutoff)
+   call self%born%getBornRad(neighs, neighList, num, self%bornRad, self%dbrdr, &
+      & self%dbrdL)
 
    select case(self%gbKernel)
    case default
@@ -342,6 +336,21 @@ subroutine update(self, neighList, num, bornRad)
 end subroutine update
 
 
+!> Return realspace cutoff for the generation of neighbour lists
+pure function getCutoff(self) result(cutoff)
+
+   !> Instance of the solvation model
+   class(TGeneralizedBorn), intent(in) :: self
+
+   !> Maximal needed real space cutoff
+   real(wp) :: cutoff
+
+   cutoff = max(self%surface%cutoff, self%born%cutoff)
+
+end function getCutoff
+
+
+!> Add potential shift from solvation model
 subroutine addShift(self, qat, qsh, atomicShift, shellShift)
 
    !> Instance of the solvation model
@@ -386,6 +395,7 @@ pure subroutine getEnergy(self, qat, qsh, energy)
 end subroutine getEnergy
 
 
+!> Get gradient contributions from solvation model
 subroutine getGradient(self, neighList, num, qat, qsh, gradient, sigma)
 
    !> Instance of the solvation model

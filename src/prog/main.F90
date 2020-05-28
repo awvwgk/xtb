@@ -496,6 +496,9 @@ subroutine xtbMain(env, argParser)
    call initDefaults(env, calc, mol, gsolvstate)
    call env%checkpoint("Could not setup defaults")
 
+   call addNeighbourLists(env, calc, mol, calc%getCutoff())
+   call env%checkpoint("Could not setup neighbour list data")
+
 
    ! ------------------------------------------------------------------------
    !> initial guess, setup wavefunction

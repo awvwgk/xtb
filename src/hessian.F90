@@ -155,7 +155,6 @@ subroutine numhess( &
    parallize = .true.
    select type(calc)
    type is (TGFFCalculator)
-      calc%update = .false.
       parallize = .false.
    end select
 

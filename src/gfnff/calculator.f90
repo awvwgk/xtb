@@ -47,7 +47,6 @@ module xtb_gfnff_calculator
       type(TGFFData) :: param
       type(TGFFGenerator) :: gen
       type(TGFFTopology) :: topo
-      logical :: update
       integer :: version
 
    contains
@@ -125,7 +124,7 @@ subroutine singlepoint(self, env, mol, wfn, printlevel, restart, &
    ! ------------------------------------------------------------------------
    !  actual calculation
    call gfnff_eg(env,gff_print,mol%n,ichrg,mol%at,mol%xyz,make_chrg, &
-      & gradient,energy,results,self%param,self%topo,self%solv,self%update, &
+      & gradient,energy,results,self%param,self%topo,self%solv,.not.restart, &
       & self%version,self%accuracy)
 
    call env%check(exitRun)

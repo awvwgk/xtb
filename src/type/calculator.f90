@@ -21,8 +21,12 @@ module xtb_type_calculator
    use xtb_type_data, only : scc_results
    use xtb_type_environment, only : TEnvironment
    use xtb_type_molecule, only : TMolecule
-   use xtb_type_wavefunction, only : TWavefunction
+   use xtb_type_neighbourlist, only : TNeighbourList
+   use xtb_type_latticepoint, only : TLatticePoint
+   use xtb_type_solvation, only : TSolvation
    use xtb_type_solvent, only : TSolvent
+   use xtb_type_wavefunction, only : TWavefunction
+   use xtb_type_wignerseitzcell, only : TWignerSeitzCell
    implicit none
 
    public :: TCalculator
@@ -33,6 +37,10 @@ module xtb_type_calculator
    type, abstract :: TCalculator
 
       real(wp) :: accuracy
+      type(TLatticePoint) :: latp
+      type(TNeighbourList) :: neighList
+      type(TWignerSeitzCell) :: wsCell
+      class(TSolvation), allocatable :: solv_
       type(TSolvent), allocatable :: solv
 
    contains
@@ -42,6 +50,12 @@ module xtb_type_calculator
 
       !> Write informative printout
       procedure(writeInfo), deferred :: writeInfo
+
+      !> Update internal storage of coordinates
+      procedure :: update
+
+      !> Get realspace cutoff for users of neighbourlists
+      procedure :: getCutoff
 
    end type TCalculator
 
@@ -102,6 +116,70 @@ module xtb_type_calculator
 
       end subroutine writeInfo
    end interface
+
+
+contains
+
+
+!> Update internal copy of real neighbour lists
+subroutine update(self, env, mol, reset)
+
+   !> Calculator instance
+   class(TCalculator), intent(inout) :: self
+
+   !> Calculation environment
+   type(TEnvironment), intent(inout) :: env
+
+   !> Molecular structure data
+   type(TMolecule), intent(in) :: mol
+
+   !> Force update
+   logical, intent(in), optional :: reset
+
+   real(wp), allocatable :: trans(:, :)
+   real(wp) :: cutoff
+   integer :: nTrans
+   logical :: forced_update
+
+   if (present(reset)) then
+      forced_update = reset
+   else
+      forced_update = .false.
+   end if
+
+   cutoff = self%getCutoff()
+   nTrans = self%latp%nTrans
+   if (cutoff > 0.0_wp) then
+      call self%latp%update(env, mol%lattice)
+      call self%latp%getLatticePoints(trans, cutoff)
+      if (nTrans == self%latp%nTrans .or. forced_update) then
+         call self%neighList%update(mol%xyz, trans)
+         call self%wsCell%update(mol%xyz, trans)
+      else
+         call self%neighList%generate(env, mol%xyz, cutoff, trans, .false.)
+         call self%wsCell%generate(env, mol%xyz, cutoff, trans, .false.)
+      end if
+   end if
+
+end subroutine update
+
+
+!> Return realspace cutoff for the generation of neighbour lists
+pure function getCutoff(self) result(cutoff)
+
+   !> Calculator instance
+   class(TCalculator), intent(in) :: self
+
+   !> Maximal needed real space cutoff
+   real(wp) :: cutoff
+
+   if (allocated(self%solv_)) then
+      cutoff = self%solv_%getCutoff()
+   else
+      cutoff = 0.0_wp
+   end if
+
+end function getCutoff
 
 
 end module xtb_type_calculator
