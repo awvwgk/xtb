@@ -320,7 +320,7 @@ subroutine update(self, neighList, num)
 
    if (self%alpbet > 0.0_wp) then
       call getADet(self%nAtom, neighList%coords, num, self%vdwRad, aDet)
-      self%bornMat = self%bornMat + self%alpbet / aDet
+      self%bornMat = self%bornMat + self%kEps * self%alpbet / aDet
    end if
 
    if (allocated(self%hBondStrength)) then
@@ -825,20 +825,19 @@ subroutine getADetDeriv(nAtom, xyz, num, rad, kEps, qvec, gradient, sigma)
       inertia(:, :) = inertia + rad3 * ((r2 + tof*rad2) * unity &
          & - spread(vec, 1, 3) * spread(vec, 2, 3))
    end do
-
    aDet = sqrt(matDet3x3(inertia)**(1.0_wp/3.0_wp)/(tof*totRad3))
+
    aDeriv(:, :) = reshape([&
       & inertia(1,1)*(inertia(2,2)+inertia(3,3))-inertia(1,2)**2-inertia(1,3)**2, &
-      & inertia(1,2)*inertia(3,3)-inertia(1,3)*inertia(2,3), &
-      & inertia(1,3)*inertia(2,2)-inertia(1,2)*inertia(3,2), &
-      & inertia(1,2)*inertia(3,3)-inertia(1,3)-inertia(2,3), &
+      & inertia(1,2)*inertia(3,3)-inertia(1,3)*inertia(2,3), & ! xy
+      & inertia(1,3)*inertia(2,2)-inertia(1,2)*inertia(3,2), & ! xz
+      & inertia(1,2)*inertia(3,3)-inertia(1,3)*inertia(2,3), & ! xy
       & inertia(2,2)*(inertia(1,1)+inertia(3,3))-inertia(1,2)**2-inertia(2,3)**2, &
-      & inertia(1,1)*inertia(2,3)-inertia(1,2)*inertia(1,3), &
-      & inertia(1,3)*inertia(2,2)-inertia(1,2)*inertia(3,2), &
-      & inertia(1,1)*inertia(2,3)-inertia(1,2)*inertia(1,3), &
+      & inertia(1,1)*inertia(2,3)-inertia(1,2)*inertia(1,3), & ! yz
+      & inertia(1,3)*inertia(2,2)-inertia(1,2)*inertia(3,2), & ! xz
+      & inertia(1,1)*inertia(2,3)-inertia(1,2)*inertia(1,3), & ! yz
       & inertia(3,3)*(inertia(1,1)+inertia(2,2))-inertia(1,3)**2-inertia(2,3)**2],&
-      & shape=[3, 3], order=[2, 1]) &
-      & * 125.0_wp / (48.0_wp * aDet**5 * totRad3**3) &
+      & shape=[3, 3]) * (250.0_wp / (48.0_wp * totRad3**3 * aDet**5)) &
       & * (-0.5_wp * kEps * qtotal**2 / aDet**2)
 
    do iat = 1, nAtom
@@ -846,7 +845,7 @@ subroutine getADetDeriv(nAtom, xyz, num, rad, kEps, qvec, gradient, sigma)
       rad2 = rad(izp) * rad(izp)
       rad3 = rad2 * rad(izp)
       vec(:) = xyz(:, iat) - center
-      gradient(:, iat) = gradient(:, iat) + rad3 * matmul(aDeriv, vec)
+      gradient(:, iat) = gradient(:, iat) + rad3 * matmul(aderiv, vec)
    end do
 
 end subroutine getADetDeriv

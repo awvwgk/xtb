@@ -501,7 +501,7 @@ subroutine test_solv_alpb
    integer :: ii, jj
    logical :: fail
    real(wp) :: energy, sigma(3, 3), eps(3, 3), er, el
-   real(wp), allocatable :: gradient(:, :), bornRad(:)
+   real(wp), allocatable :: gradient(:, :)
    real(wp), parameter :: trans(3, 1) = 0.0_wp
    real(wp), parameter :: step = 1.0e-5_wp, step2 = 0.5_wp/step
    real(wp), parameter :: unity(3, 3) = reshape(&
@@ -535,12 +535,13 @@ subroutine test_solv_alpb
    call assert(.not.fail)
 
    call gbsa%update(neighList, mol%id)
-   bornRad = gbsa%bornRad
    call gbsa%getEnergy(charges, charges, energy)
    call gbsa%getGradient(neighList, mol%id, charges, charges, gradient, sigma)
 
-   call assert_close(energy, -0.36992594997156E-01_wp, thr)
-   call assert_close(norm2(gradient), 0.35406332631899E-02_wp, thr)
+   call assert_close(energy, -0.87196640561927E-01_wp, thr)
+   call assert_close(norm2(gradient), 0.44787894356141E-02_wp, thr)
+
+   if (afail > 0) call terminate(afail)
 
    ! check numerical gradient
    do ii = 1, nat
@@ -549,7 +550,6 @@ subroutine test_solv_alpb
          call mol%update
          call neighList%update(mol%xyz, trans)
          call gbsa%update(neighList, mol%id)
-         gbsa%bornRad = bornRad
          call gbsa%getEnergy(charges, charges, er)
 
          mol%xyz(jj, ii) = mol%xyz(jj, ii) - 2*step
@@ -564,6 +564,8 @@ subroutine test_solv_alpb
       end do
    end do
 
+   if (afail > 0) call terminate(afail)
+
    energy = 0.0_wp
    gradient(:, :) = 0.0_wp
    sigma(:, :) = 0.0_wp
@@ -577,8 +579,10 @@ subroutine test_solv_alpb
    call gbsa%getEnergy(charges, charges, energy)
    call gbsa%getGradient(neighList, mol%id, charges, charges, gradient, sigma)
 
-   call assert_close(energy, -0.37622153331423E-01_wp, thr)
-   call assert_close(norm2(gradient), 0.37925825515919E-02_wp, thr)
+   call assert_close(energy, -0.86995190215768E-01_wp, thr)
+   call assert_close(norm2(gradient), 0.46154760224318E-02_wp, thr)
+
+   if (afail > 0) call terminate(afail)
 
    ! check numerical gradient
    do ii = 1, nat
