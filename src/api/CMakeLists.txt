@@ -23,6 +23,7 @@ list(APPEND srcs
   "${dir}/molecule.f90"
   "${dir}/interface.f90"
   "${dir}/results.f90"
+  "${dir}/solvation.f90"
   "${dir}/utils.f90"
   "${dir}/version.f90"
 )

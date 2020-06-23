@@ -21,6 +21,7 @@ srcs += files(
   'molecule.f90',
   'interface.f90',
   'results.f90',
+  'solvation.f90',
   'utils.f90',
   'version.f90',
 )

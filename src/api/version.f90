@@ -24,7 +24,7 @@ module xtb_api_version
    public :: getAPIVersion_api
 
    integer(c_int), parameter :: apiMajor = 1
-   integer(c_int), parameter :: apiMinor = 0
+   integer(c_int), parameter :: apiMinor = 1
    integer(c_int), parameter :: apiPatch = 0
 
 

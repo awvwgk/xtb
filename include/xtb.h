@@ -20,12 +20,15 @@
 #define XTB_API_ENTRY
 #define XTB_API_CALL
 #define XTB_API_SUFFIX__VERSION_6_3_0
+#define XTB_API_SUFFIX__VERSION_6_3_0_DEPRECATED
 #define XTB_API_SUFFIX__VERSION_6_3_1
+#define XTB_API_SUFFIX__VERSION_NEXT
 
 /// Define proprocessor to allow to check for specific API features
-#define XTB_API_VERSION 10000
+#define XTB_API_VERSION 10100
 #define XTB_VERSION_6_3_0   1
 #define XTB_VERSION_6_3_1   1
+#define XTB_VERSION_NEXT    1
 
 /// Possible print levels for API calls
 #define XTB_VERBOSITY_FULL    2
@@ -50,6 +53,9 @@ typedef struct _xtb_TMolecule* xtb_TMolecule;
 
 /// Single point calculator class
 typedef struct _xtb_TCalculator* xtb_TCalculator;
+
+/// Blueprint to create solvation models for calculators
+typedef struct _xtb_TSolvation* xtb_TSolvation;
 
 /// Single point results class
 typedef struct _xtb_TResults* xtb_TResults;
@@ -170,13 +176,15 @@ xtb_loadGFNFF(xtb_TEnvironment /* env */,
               char* /* filename */) XTB_API_SUFFIX__VERSION_6_3_0;
 
 /// Add a solvation model to calculator (requires loaded parametrisation)
+/// This method is unreliable, as it is tied in with the defaults defined in
+/// the xtb version, the preferrable solution is to use a solvation model object
 extern XTB_API_ENTRY void XTB_API_CALL
 xtb_setSolvent(xtb_TEnvironment /* env */,
                xtb_TCalculator /* calc */,
                char* /* solvent */,
                int* /* state */,
                double* /* temp */,
-               int* /* grid */) XTB_API_SUFFIX__VERSION_6_3_0;
+               int* /* grid */) XTB_API_SUFFIX__VERSION_6_3_0_DEPRECATED;
 
 /// Unset the solvation model
 extern XTB_API_ENTRY void XTB_API_CALL
@@ -221,6 +229,18 @@ xtb_singlepoint(xtb_TEnvironment /* env */,
                 xtb_TMolecule /* mol */,
                 xtb_TCalculator /* calc */,
                 xtb_TResults /* res */) XTB_API_SUFFIX__VERSION_6_3_0;
+
+/*
+ * Solvation model blueprint
+**/
+
+/// Create new solvation model object
+extern XTB_API_ENTRY xtb_TSolvation XTB_API_CALL
+xtb_newSolvation(void) XTB_API_SUFFIX__VERSION_NEXT;
+
+/// Delete solvation model object
+extern XTB_API_ENTRY xtb_TSolvation XTB_API_CALL
+xtb_delSolvation(xtb_TSolvation* /* solv */) XTB_API_SUFFIX__VERSION_NEXT;
 
 /*
  * Calculation results
