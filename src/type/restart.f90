@@ -36,6 +36,9 @@ module xtb_type_restart
       !> Force field topology
       type(TGFFTopology) :: topo
 
+      !> Pointer to next element in the list
+      type(TRestart), allocatable :: next
+
    end type TRestart
 
 

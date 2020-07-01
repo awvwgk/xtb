@@ -777,6 +777,7 @@ subroutine rdcontrol(fname,env,copy_file)
          case('external' ); call rdblock(env,set_external,line,id,copy,err,ncount)
          case('symmetry' ); call rdblock(env,set_symmetry,line,id,copy,err,ncount)
          case('metadyn'  ); call rdblock(env,set_metadyn, line,id,copy,err,ncount)
+         case('oniom'    ); call rdblock(env,set_oniom,   line,id,copy,err,ncount)
          case('path'     ); call rdblock(env,set_path,    line,id,copy,err,ncount)
          case('reactor'  ); call rdblock(env,set_reactor, line,id,copy,err,ncount)
          case('stm'      ); call rdblock(env,set_stm,     line,id,copy,err,ncount)
@@ -890,34 +891,25 @@ subroutine rdblock(env,handler,line,id,copy,err,ncount)
 end subroutine rdblock
 
 subroutine set_exttyp(typ)
+   use xtb_main_methods, only : parseCalcMethod
    implicit none
    character(len=*),intent(in) :: typ
+   integer :: idum
    logical,save :: set = .true.
    if (.not.set) return
-   select case(typ)
-   case default ! do nothing
+
+   call parseCalcMethod(idum, typ)
+
+   if (idum == calcMethod%invalid) then
       call raise('S',typ//' is no valid exttyp (internal error)',1)
+   else
+      mode_extrun = idum
+      if (mode_extrun == calcMethod%turbomole) then
+         extcode = 1
+         extmode = 1
+      end if
+   end if
 
-   case('vtb')
-      mode_extrun = p_ext_vtb
-   case('eht')
-      mode_extrun = p_ext_eht
-   case('xtb')
-      mode_extrun = p_ext_xtb
-   case('qmdff')
-      mode_extrun = p_ext_qmdff
-   case('orca')
-      mode_extrun = p_ext_orca
-   case('turbomole')
-      mode_extrun = p_ext_turbomole
-      extcode = 1
-      extmode = 1
-   case('mopac')
-      mode_extrun = p_ext_mopac
-   case('ff')
-      mode_extrun = p_ext_gfnff
-
-   end select
    set = .false.
 end subroutine set_exttyp
 
@@ -2332,6 +2324,53 @@ subroutine set_split(env,key,val)
    character(len=*),intent(in) :: val
 end subroutine set_split
 
+
+subroutine set_oniom(env, key, val)
+   use xtb_main_methods, only : parseCalcMethod
+   use xtb_oniom_input, only : validOuterMethod
+   character(len=*), parameter :: source = 'set_oniom'
+   type(TEnvironment), intent(inout) :: env
+   character(len=*),intent(in) :: key
+   character(len=*),intent(in) :: val
+   integer :: ic, innerMethod, outerMethod
+   logical, save :: set1 = .true.
+
+   select case(key)
+   case default
+      call env%warning("the key '"//key//"' is not recognized by oniom",source)
+   case('method')
+      if (.not.set1) return
+      ic = index(val, colon)
+      if (ic == 0) then
+         call env%warning("Could not parse '"//val// &
+            & "', format should be 'inner,outer'", source)
+         set1 = .false.
+         return
+      end if
+
+      call parseCalcMethod(innerMethod, val(:ic-1))
+      if (innerMethod == calcMethod%invalid) then
+         call env%warning("'"//val(:ic-1)//"' is not a valid inner region method", &
+            & source)
+         set1 = .false.
+         return
+      end if
+
+      call parseCalcMethod(outerMethod, val(ic+1:))
+      if (any(outerMethod == validOuterMethod)) then
+         oniomInput%inner = innerMethod
+         oniomInput%outer = outerMethod
+      else
+         call env%warning("'"//val(ic+1:)//"' is not a valid outer region method", &
+            & source)
+      end if
+
+      set1 = .false.
+   end select
+
+end subroutine set_oniom
+
+
 subroutine set_legacy(env,key,val)
    use xtb_mctc_strings, only : parse
    use xtb_sphereparam
@@ -2449,5 +2488,6 @@ subroutine set_legacy(env,key,val)
    end select
 
 end subroutine set_legacy
+
 
 end module xtb_setmod

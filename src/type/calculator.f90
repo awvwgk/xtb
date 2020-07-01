@@ -89,7 +89,7 @@ module xtb_type_calculator
       end subroutine singlepoint
 
 
-      subroutine writeInfo(self, unit, mol)
+      subroutine writeInfo(self, unit, mol, printlevel)
          import :: TCalculator, TMolecule
 
          !> Calculator instance
@@ -100,6 +100,9 @@ module xtb_type_calculator
 
          !> Molecular structure data
          type(TMolecule), intent(in) :: mol
+
+         !> Print level for IO
+         integer, intent(in) :: printlevel
 
       end subroutine writeInfo
    end interface

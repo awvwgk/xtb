@@ -24,6 +24,8 @@ module xtb_setparam
    use xtb_solv_kernel, only : gbKernel
    use xtb_solv_input, only : TSolvInput
    use xtb_type_setvar
+   use xtb_main_methods, only : calcMethod
+   use xtb_oniom_input, only : TOniomInput
 
    implicit none
 
@@ -82,6 +84,9 @@ module xtb_setparam
 
 ! linear dependencies overlap cut-off stuff
    real(wp) :: lidethr = 0.00001_wp   ! cut-off threshold for small overlap eigenvalues
+
+   !> Information to setup an ONIOM calculator stack
+   type(TOniomInput) :: oniomInput
 
 !! ------------------------------------------------------------------------
 !  default optimization level
@@ -349,22 +354,15 @@ module xtb_setparam
    integer  :: tsroot = 0
    integer  :: extcode = 0
    integer  :: extmode = 0
-   integer  :: mode_extrun = 1 ! xtb is default
-   integer, parameter :: p_ext_vtb       = -1
-   integer, parameter :: p_ext_eht       =  0
-   integer, parameter :: p_ext_xtb       =  1
-   integer, parameter :: p_ext_qmdff     =  2
-   integer, parameter :: p_ext_driver    =  3
-   integer, parameter :: p_ext_turbomole =  4
-   integer, parameter :: p_ext_orca      =  5
-   integer, parameter :: p_ext_terachem  =  6
-   integer, parameter :: p_ext_qchem     =  7
-   integer, parameter :: p_ext_nwchem    =  8
-   integer, parameter :: p_ext_molpro    =  9
-   integer, parameter :: p_ext_psi4      = 10
-   integer, parameter :: p_ext_adf       = 11
-   integer, parameter :: p_ext_mopac     = 12
-   integer, parameter :: p_ext_gfnff     = 13
+   integer  :: mode_extrun = calcMethod%xtb
+   integer, parameter :: p_ext_eht       = calcMethod%eht
+   integer, parameter :: p_ext_xtb       = calcMethod%xtb
+   integer, parameter :: p_ext_qmdff     = calcMethod%qmdff
+   integer, parameter :: p_ext_turbomole = calcMethod%turbomole
+   integer, parameter :: p_ext_orca      = calcMethod%orca
+   integer, parameter :: p_ext_oniom     = calcMethod%oniom
+   integer, parameter :: p_ext_mopac     = calcMethod%mopac
+   integer, parameter :: p_ext_gfnff     = calcMethod%gfnff
 !  integer  :: dummyint ! not used
    integer  :: runtyp = 2 ! SCC by default
    integer, parameter :: p_run_scc    =   2

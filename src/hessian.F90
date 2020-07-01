@@ -44,6 +44,7 @@ subroutine numhess( &
    use xtb_axis, only : axis
 
    use xtb_gfnff_calculator, only : TGFFCalculator
+   use xtb_oniom_calculator, only : TOniomCalculator
 
    implicit none
 
@@ -157,6 +158,19 @@ subroutine numhess( &
    type is (TGFFCalculator)
       calc%update = .false.
       parallize = .false.
+   ! GFN-FF parallelisation issues can bleed through the ONIOM stack, to be on the
+   ! save side we disable the parallelisation, if we find GFN-FF in the stack
+   type is (TOniomCalculator)
+      select type(gfnff => calc%inner)
+      type is (TGFFCalculator)
+         gfnff%update = .false.
+         parallize = .false.
+      end select
+      select type(gfnff => calc%outer)
+      type is (TGFFCalculator)
+         gfnff%update = .false.
+         parallize = .false.
+      end select
    end select
 
    omp_parallize: if (parallize) then

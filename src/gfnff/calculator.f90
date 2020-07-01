@@ -226,7 +226,7 @@ subroutine print_gfnff_results(iunit,res_gff,verbose,lsolv)
    end if
 end subroutine print_gfnff_results
 
-subroutine writeInfo(self, unit, mol)
+subroutine writeInfo(self, unit, mol, printlevel)
 
    !> Calculator instance
    class(TGFFCalculator), intent(in) :: self
@@ -236,6 +236,9 @@ subroutine writeInfo(self, unit, mol)
 
    !> Molecular structure data
    type(TMolecule), intent(in) :: mol
+
+   !> Print level for IO
+   integer, intent(in) :: printlevel
 
    select case(mode_extrun)
    case(p_ext_gfnff)

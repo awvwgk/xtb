@@ -15,7 +15,7 @@
 ! You should have received a copy of the GNU Lesser General Public License
 ! along with xtb.  If not, see <https://www.gnu.org/licenses/>.
 
-!> TODO
+!> General setup routines
 module xtb_main_setup
    use xtb_mctc_accuracy, only : wp
    use xtb_mctc_systools, only : rdpath
@@ -24,13 +24,16 @@ module xtb_main_setup
    use xtb_type_calculator, only : TCalculator
    use xtb_type_dummycalc, only : TDummyCalculator
    use xtb_type_environment, only : TEnvironment
-   use xtb_type_molecule, only : TMolecule
+   use xtb_type_molecule, only : TMolecule, init
    use xtb_type_param, only : TxTBParameter, chrg_parameter
    use xtb_type_restart, only : TRestart
    use xtb_type_wavefunction, only : TWavefunction
+   use xtb_type_atomlist, only : len
    use xtb_readparam, only : readParam
    use xtb_paramset, only : use_parameterset
    use xtb_basis, only : newBasisset
+   use xtb_oniom_calculator, only : TOniomCalculator
+   use xtb_oniom_input, only : TOniomInput
    use xtb_xtb_calculator, only : TxTBCalculator
    use xtb_gfnff_calculator, only : TGFFCalculator
    use xtb_eeq, only : eeq_chrgeq
@@ -44,7 +47,8 @@ module xtb_main_setup
    private
 
    public :: newCalculator, newWavefunction, addSolvationModel
-   public :: newXTBCalculator, newGFFCalculator
+   public :: newXTBCalculator, newGFFCalculator, newOniomCalculator
+   public :: newOniomWavefunctions
 
 
 contains
@@ -68,13 +72,26 @@ subroutine newCalculator(env, mol, calc, fname, restart, accuracy)
 
    type(TxTBCalculator), allocatable :: xtb
    type(TGFFCalculator), allocatable :: gfnff
+   type(TOniomCalculator), allocatable :: oniom
    
    logical :: exitRun
 
    select case(mode_extrun)
    case default
       call env%error("Unknown calculator type", source)
-   case(p_ext_eht, p_ext_xtb)
+   case(calcMethod%oniom)
+      allocate(oniom)
+
+      call newOniomCalculator(env, mol, oniom, oniomInput, gfn_method, accuracy)
+
+      call env%check(exitRun)
+      if (exitRun) then
+         call env%error("Could not construct new calculator", source)
+         return
+      end if
+
+      call move_alloc(oniom, calc)
+   case(calcMethod%eht, calcMethod%xtb)
       allocate(xtb)
 
       call newXTBCalculator(env, mol, xtb, fname, gfn_method, accuracy)
@@ -86,7 +103,7 @@ subroutine newCalculator(env, mol, calc, fname, restart, accuracy)
       end if
 
       call move_alloc(xtb, calc)
-   case(p_ext_gfnff)
+   case(calcMethod%gfnff)
       allocate(gfnff)
 
       call newGFFCalculator(env, mol, gfnff, fname, restart)
@@ -98,12 +115,139 @@ subroutine newCalculator(env, mol, calc, fname, restart, accuracy)
       end if
 
       call move_alloc(gfnff, calc)
-   case(p_ext_qmdff, p_ext_orca, p_ext_turbomole, p_ext_mopac)
+   case(calcMethod%qmdff, calcMethod%orca, calcMethod%turbomole, calcMethod%mopac)
       allocate(TDummyCalculator :: calc)
       calc%accuracy = accuracy
    end select
 
 end subroutine newCalculator
+
+
+subroutine newOniomCalculator(env, mol, calc, input, method, accuracy)
+
+   character(len=*), parameter :: source = 'main_setup_newOniomCalculator'
+
+   type(TEnvironment), intent(inout) :: env
+
+   type(TMolecule), intent(in) :: mol
+
+   type(TOniomCalculator), intent(out) :: calc
+
+   type(TOniomInput), intent(in) :: input
+
+   integer, intent(in), optional :: method
+
+   real(wp), intent(in), optional :: accuracy
+
+   type(TxTBCalculator), allocatable :: xtb
+   type(TGFFCalculator), allocatable :: gfnff
+   type(TMolecule) :: inner
+   logical :: exitRun
+   integer, allocatable :: at(:)
+   real(wp), allocatable :: xyz(:, :)
+
+   calc%list = input%list
+
+   if (len(calc%list) <= 0) then
+      call env%error("No atoms for inner region given", source)
+      return
+   end if
+
+   ! Collect the inner region
+   call calc%list%gather(mol%at, at)
+   call calc%list%gather(mol%xyz, xyz)
+   call init(inner, at, xyz, chrg=mol%chrg, uhf=mol%uhf)
+
+   select case(input%inner)
+   case default
+      call env%error("Unknown inner calculator type", source)
+
+   case(calcMethod%eht, calcMethod%xtb)
+      allocate(xtb)
+
+      call newXTBCalculator(env, inner, xtb, method=method, accuracy=accuracy)
+
+      call env%check(exitRun)
+      if (exitRun) then
+         call env%error("Could not construct new calculator", source)
+         return
+      end if
+
+      call move_alloc(xtb, calc%inner)
+
+   case(calcMethod%gfnff)
+      allocate(gfnff)
+
+      call newGFFCalculator(env, inner, gfnff, '---', .false.)
+
+      call env%check(exitRun)
+      if (exitRun) then
+         call env%error("Could not construct new calculator", source)
+         return
+      end if
+
+      call move_alloc(gfnff, calc%inner)
+
+   case(calcMethod%qmdff, calcMethod%orca, calcMethod%turbomole, calcMethod%mopac)
+      allocate(TDummyCalculator :: calc%inner)
+      calc%inner%accuracy = accuracy
+
+   end select
+
+   select case(input%outer)
+   case default
+      call env%error("Unknown outer calculator type", source)
+   case(calcMethod%eht, calcMethod%xtb)
+      allocate(xtb)
+
+      call newXTBCalculator(env, inner, xtb, method=method, accuracy=accuracy)
+
+      call env%check(exitRun)
+      if (exitRun) then
+         call env%error("Could not construct new calculator", source)
+         return
+      end if
+
+      call move_alloc(xtb, calc%subtr)
+
+      allocate(xtb)
+
+      call newXTBCalculator(env, mol, xtb, method=method, accuracy=accuracy)
+
+      call env%check(exitRun)
+      if (exitRun) then
+         call env%error("Could not construct new calculator", source)
+         return
+      end if
+
+      call move_alloc(xtb, calc%outer)
+   case(calcMethod%gfnff)
+      allocate(gfnff)
+
+      call newGFFCalculator(env, inner, gfnff, '---', .false.)
+
+      call env%check(exitRun)
+      if (exitRun) then
+         call env%error("Could not construct new calculator", source)
+         return
+      end if
+
+      call move_alloc(gfnff, calc%subtr)
+
+      allocate(gfnff)
+
+      call newGFFCalculator(env, mol, gfnff, '---', .false.)
+
+      call env%check(exitRun)
+      if (exitRun) then
+         call env%error("Could not construct new calculator", source)
+         return
+      end if
+
+      call move_alloc(gfnff, calc%outer)
+   end select
+
+end subroutine newOniomCalculator
 
 
 subroutine newXTBCalculator(env, mol, calc, fname, method, accuracy)
@@ -279,6 +423,39 @@ subroutine newWavefunction(env, mol, calc, chk)
    call newWavefunction_(env, mol, calc, chk%wfn)
 end subroutine newWavefunction
 
+subroutine newOniomWavefunctions(env, mol, calc, chk)
+   type(TEnvironment), intent(inout) :: env
+   type(TRestart), intent(inout) :: chk
+   type(TOniomCalculator), intent(in) :: calc
+   type(TMolecule), intent(in) :: mol
+   type(TMolecule) :: inner
+   integer, allocatable :: at(:)
+   real(wp), allocatable :: xyz(:, :)
+
+   ! Collect the inner region
+   call calc%list%gather(mol%at, at)
+   call calc%list%gather(mol%xyz, xyz)
+   call init(inner, at, xyz, chrg=mol%chrg, uhf=mol%uhf)
+
+   select type(xtb => calc%outer)
+   type is (TxTBCalculator)
+      call newWavefunction(env, mol, xtb, chk)
+   end select
+
+   allocate(chk%next)
+   select type(xtb => calc%subtr)
+   type is (TxTBCalculator)
+      call newWavefunction(env, inner, xtb, chk%next)
+   end select
+
+   allocate(chk%next%next)
+   select type(xtb => calc%inner)
+   type is (TxTBCalculator)
+      call newWavefunction(env, inner, xtb, chk%next%next)
+   end select
+
+end subroutine newOniomWavefunctions
+
 subroutine newWavefunction_(env, mol, calc, wfn)
    character(len=*), parameter :: source = 'main_setup_newWavefunction'
    type(TEnvironment), intent(inout) :: env
@@ -330,8 +507,14 @@ subroutine addSolvationModel(env, calc, input)
 
    level = 0
    select type(calc)
-   type is(TxTBCalculator)
+   type is (TxTBCalculator)
       level = calc%xtbData%level
+   ! Only outer region of ONIOM stack should receive solvation model
+   type is (TOniomCalculator)
+      select type(xtb => calc%outer)
+      type is (TxTBCalculator)
+         level = xtb%xtbData%level
+      end select
    end select
 
    if (allocated(input%solvent)) then
@@ -343,7 +526,16 @@ subroutine addSolvationModel(env, calc, input)
    if (calc%lSolv) then
       allocate(calc%solvation)
       call init(calc%solvation, env, input, level)
-   endif
+
+      ! In case of ONIOM calculators we want the solvation model in the outer
+      ! region, therefore, we just move the allocation there
+      select type(calc)
+      type is (TOniomCalculator)
+         calc%outer%lSolv = calc%lSolv
+         call move_alloc(calc%solvation, calc%outer%solvation)
+      end select
+
+   end if
 
 end subroutine addSolvationModel
 

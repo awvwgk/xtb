@@ -19,6 +19,7 @@ srcs += files(
   'defaults.f90',
   'geometry.f90',
   'json.f90',
+  'methods.f90',
   'property.f90',
   'setup.f90',
 )

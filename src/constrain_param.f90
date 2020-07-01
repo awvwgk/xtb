@@ -175,6 +175,9 @@ subroutine read_userdata(fname,env,mol)
          case('reactor'  )
             if (verbose) write(env%unit,'(">",1x,a)') line(2:)
             call rdblock(env,set_reactor,line,id,mol%n,mol%at,idMap,mol%xyz,err)
+         case('oniom'  )
+            if (verbose) write(env%unit,'(">",1x,a)') line(2:)
+            call rdblock(env,set_oniom,  line,id,mol%n,mol%at,idMap,mol%xyz,err)
          case('set'      ); call rdsetbl(env,set_legacy,line,id,mol%n,mol%at,idMap,mol%xyz,err)
          case default ! unknown keyword -> ignore, we don't raise them
             call getline(id,line,err)
@@ -1389,6 +1392,46 @@ subroutine set_freeze(env,key,val,nat,at,idMap,xyz)
 
 end subroutine set_freeze
 
+
+subroutine set_oniom(env,key,val,nat,at,idMap,xyz)
+   use xtb_setmod, only : oniomInput
+   character(len=*), parameter :: source = 'userdata_oniom'
+   type(TEnvironment), intent(inout) :: env
+   character(len=*),intent(in) :: key
+   character(len=*),intent(in) :: val
+   integer, intent(in) :: nat
+   integer, intent(in) :: at(nat)
+   type(TIdentityMap), intent(in) :: idMap
+   real(wp),intent(in) :: xyz(3,nat)
+
+   integer  :: idum
+   real(wp) :: ddum
+   logical  :: ldum
+   integer  :: list(nat),nlist
+   integer  :: i,j
+
+   integer  :: narg
+   character(len=p_str_length),dimension(p_arg_length) :: argv
+
+   call parse(val,comma,argv,narg)
+   if (verbose) then
+      do idum = 1, narg
+         write(env%unit,'("-->",1x,i0,":",1x,a)') idum, trim(argv(idum))
+      enddo
+   endif
+   select case(key)
+   case default
+   case('atoms')
+      call oniomInput%list%new(val)
+      if (oniomInput%list%get_error()) then
+         call env%warning('something is wrong in the inner region list',source)
+         return
+      endif
+   end select
+
+end subroutine set_oniom
+
+
 subroutine set_legacy(env,key,val,nat,at,idMap,xyz)
    implicit none
    character(len=*), parameter :: source = 'userdata_legacy'
@@ -1421,5 +1464,6 @@ subroutine set_legacy(env,key,val,nat,at,idMap,xyz)
    end select
 
 end subroutine set_legacy
+
 
 end module xtb_constrain_param

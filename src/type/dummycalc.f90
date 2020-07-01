@@ -185,7 +185,7 @@ subroutine singlepoint(self, env, mol, chk, printlevel, restart, &
 end subroutine singlepoint
 
 
-subroutine writeInfo(self, unit, mol)
+subroutine writeInfo(self, unit, mol, printlevel)
 
    !> Calculator instance
    class(TDummyCalculator), intent(in) :: self
@@ -195,6 +195,9 @@ subroutine writeInfo(self, unit, mol)
 
    !> Molecular structure data
    type(TMolecule), intent(in) :: mol
+
+   !> Print level for IO
+   integer, intent(in) :: printlevel
 
    select case(mode_extrun)
    case(p_ext_qmdff)

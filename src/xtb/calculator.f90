@@ -301,7 +301,7 @@ subroutine print_gfn2_results(iunit,res,verbose,lsolv)
 end subroutine print_gfn2_results
 
 
-subroutine writeInfo(self, unit, mol)
+subroutine writeInfo(self, unit, mol, printlevel)
 
    !> Calculator instance
    class(TxTBCalculator), intent(in) :: self
@@ -311,6 +311,9 @@ subroutine writeInfo(self, unit, mol)
 
    !> Molecular structure data
    type(TMolecule), intent(in) :: mol
+
+   !> Print level for IO
+   integer, intent(in) :: printlevel
 
    call self%xtbData%writeInfo(unit, mol%at)
 

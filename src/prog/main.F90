@@ -72,6 +72,7 @@ module xtb_prog_main
    use xtb_screening, only : screen
    use xtb_xtb_calculator
    use xtb_gfnff_calculator
+   use xtb_oniom_calculator
    use xtb_paramset
    use xtb_xtb_gfn0
    use xtb_xtb_gfn1
@@ -514,6 +515,8 @@ subroutine xtbMain(env, argParser)
    ! ------------------------------------------------------------------------
    !> initial guess, setup wavefunction
    select type(calc)
+   type is(TOniomCalculator)
+      call newOniomWavefunctions(env, mol, calc, chk)
    type is(TxTBCalculator)
       call chk%wfn%allocate(mol%n,calc%basis%nshell,calc%basis%nao)
 
@@ -543,7 +546,7 @@ subroutine xtbMain(env, argParser)
 
    ! ------------------------------------------------------------------------
    !> printout a header for the exttyp
-   call calc%writeInfo(env%unit, mol)
+   call calc%writeInfo(env%unit, mol, 2)
    select case(mode_extrun)
    case(p_ext_qmdff)
       call ff_ini(mol%n,mol%at,mol%xyz,cn,qmdff_s6)
@@ -1258,11 +1261,16 @@ subroutine parseArguments(env, args, inputFile, paramFile, accuracy, lgrad, &
          call env%warning("The use of '"//flag//"' is discouraged, " //&
             & "please use '--gfn 0' next time", source)
       
-      case('--gfnff')
+      case('--gfnff', '--gff')
          call set_exttyp('ff')
       
-      case('--gff')
-         call set_exttyp('ff')
+      case('--oniom')
+         call set_exttyp('oniom')
+
+         call args%nextArg(sec)
+         if (allocated(sec)) then
+            call set_oniom(env, 'method', sec)
+         end if
 
       case('--etemp')
          call args%nextArg(sec)
