@@ -542,6 +542,8 @@ call nvtxEndRange
       &     source = 0.0_wp)
 
 call nvtxStartRange('build_SDQH0', __LINE__)
+   !$acc enter data create(dpint(3,basis%nao,basis%nao), qpint(6,basis%nao,basis%nao))
+
    call getSelfEnergy(xtbData%hamiltonian, xtbData%nShell, mol%at, cn=cn, &
       & selfEnergy=selfEnergy, dSEdcn=dSEdcn)
    ! compute integrals and prescreen to set up list arrays
@@ -572,8 +574,10 @@ call nvtxStartRange('multipoles', __LINE__)
       call init(aes, xtbData%multipole)
 
       ! allocate arrays for lists and fill (to exploit sparsity)
+!#ifdef XTB_GPU
       allocate(mdlst(2,ndp),mqlst(2,nqp))
       call setdqlist(basis%nao,ndp,nqp,neglect,dpint,qpint,mdlst,mqlst)
+!#endif
       ! set up 1/R^n * damping function terms
       ii=mol%n*(mol%n+1)/2
       allocate(aes%gab3(mol%n, mol%n),aes%gab5(mol%n, mol%n),radcn(mol%n))
@@ -626,10 +630,10 @@ call nvtxEndRange()
       &'      gap      omega  full diag'
    endif
 
-   !$acc enter data copyin(s, dpint, qpint)
+   !$acc enter data copyin(s)
 
    call init(solver, env, S)
-   call scc(env,xtbData,solver,mol%n,wfn%nel,wfn%nopen,basis%nao,ndp,nqp,nmat,basis%nshell, &
+   call scc(env,xtbData,solver,mol%n,wfn%nel,wfn%nopen,basis%nao,ndp,nqp,neglect,nmat,basis%nshell, &
       &     mol%at,matlist,mdlst,mqlst,basis%aoat2,basis%ao2sh,basis%ash, &
       &     wfn%q,wfn%dipm,wfn%qp,qq,qlmom,wfn%qsh,zsh, &
       &     mol%xyz,aes, &
@@ -645,7 +649,7 @@ call nvtxEndRange()
       &     minpr,pr, &
       &     fail,jter)
 
-   !$acc exit data delete(s, dpint, qpint)
+   !$acc exit data delete(s)
 
    ! check if something terrible happend in the SCC
    call env%check(exitRun)
@@ -866,6 +870,8 @@ call nvtxEndRange()
          &         wfn%dipm,wfn%qp)
    endif
    call calc_dipole(mol%n,mol%at,mol%xyz,mol%z,basis%nao,wfn%P,dpint,dip,dipol)
+
+   !$acc exit data delete(dpint,qpint)
 
    if (profile) call timer%measure(7)
 
