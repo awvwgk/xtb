@@ -19,7 +19,34 @@ jobs:
         FC: gfortran-9
         CC: gcc-9
 
-    - name: Build library
+    - name: Build project
+      run: meson compile -C _build
+
+    - name: Run unit tests
+      run: meson test -C _build --print-errorlogs --no-rebuild
+      env:
+        OMP_NUM_THREADS: 2,1
+
+  msys2-build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+    - uses: msys2/setup-msys2@v2
+      with:
+        msystem: MINGW64
+        install: >-
+          mingw64/mingw-w64-x86_64-meson
+          mingw64/mingw-w64-x86_64-ninja
+          mingw64/mingw-w64-x86_64-gcc
+          mingw64/mingw-w64-x86_64-gcc-fortran
+          mingw64/mingw-w64-x86_64-lapack
+    - uses: actions/checkout@v2
+    - name: Configure build
+      run: meson setup _build -Dla_backend=netlib --warnlevel=0
+
+    - name: Build project
       run: meson compile -C _build
 
     - name: Run unit tests
