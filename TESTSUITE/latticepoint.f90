@@ -37,10 +37,10 @@ subroutine test_latticepoint_pbc3d
    call assert(.not.fail)
    call assert(allocated(latp%trans))
    call assert(allocated(latp%dist2))
-   call assert_eq(latp%nTrans, 389)
+   call assert_eq(latp%nTrans, 739)
 
    call latp%getLatticePoints(latticePoint)
-   call assert_eq(size(latticePoint, dim=2), 389)
+   call assert_eq(size(latticePoint, dim=2), 739)
 
    !> Simply switch lattice without reinitalization
    call latp%update(env, lattice_CaF2)
@@ -48,13 +48,13 @@ subroutine test_latticepoint_pbc3d
    call assert(.not.fail)
    call assert(allocated(latp%trans))
    call assert(allocated(latp%dist2))
-   call assert_eq(latp%nTrans, 959)
+   call assert_eq(latp%nTrans, 1553)
 
    call latp%getLatticePoints(latticePoint, 30.0_wp)
-   call assert_eq(size(latticePoint, dim=2), 381)
+   call assert_eq(size(latticePoint, dim=2), 791)
 
    call latp%getLatticePoints(latticePoint, 50.0_wp)
-   call assert_eq(size(latticePoint, dim=2), 959)
+   call assert_eq(size(latticePoint, dim=2), 1553)
 
    !> Reinitialize with new lattice and new cutoff
    call init(latp, env, lattice_ammonia, boundaryCondition%pbc3d, 60.0_wp)
@@ -62,13 +62,13 @@ subroutine test_latticepoint_pbc3d
    call assert(.not.fail)
    call assert(allocated(latp%trans))
    call assert(allocated(latp%dist2))
-   call assert_eq(latp%nTrans, 451)
+   call assert_eq(latp%nTrans, 833)
 
    call latp%getLatticePoints(latticePoint)
-   call assert_eq(size(latticePoint, dim=2), 451)
+   call assert_eq(size(latticePoint, dim=2), 833)
 
    call latp%getLatticePoints(latticePoint, 40.0_wp)
-   call assert_eq(size(latticePoint, dim=2), 143)
+   call assert_eq(size(latticePoint, dim=2), 317)
 
    !> Reinitialize generator to exclude inversion symmetry
    call init(latp, env, lattice_ammonia, boundaryCondition%pbc3d, 50.0_wp, &
@@ -77,13 +77,13 @@ subroutine test_latticepoint_pbc3d
    call assert(.not.fail)
    call assert(allocated(latp%trans))
    call assert(allocated(latp%dist2))
-   call assert_eq(latp%nTrans, 130)
+   call assert_eq(latp%nTrans, 264)
 
    call latp%getLatticePoints(latticePoint, 40.0_wp)
-   call assert_eq(size(latticePoint, dim=2), 72) ! 143 / 2 + 1
+   call assert_eq(size(latticePoint, dim=2), 159) ! 317 / 2 + 1
 
    call latp%getLatticePoints(latticePoint, 33.0_wp)
-   call assert_eq(size(latticePoint, dim=2), 41)
+   call assert_eq(size(latticePoint, dim=2), 105)
 
    call terminate(afail)
 

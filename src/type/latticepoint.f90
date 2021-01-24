@@ -144,6 +144,7 @@ subroutine initLatticePoint(self, env, lattice, boundaryCond, cutoff, &
       self%ranges(:, :) = 0
 
    case(boundaryCondition%pbc3d)
+      ! Include some buffer accounting for the cell size in the ranges
       call getRangesPBC3D(lattice, cutoff, self%ranges)
 
    end select
@@ -215,17 +216,22 @@ subroutine getLatticePoints(self, latticePoint, cutoff)
    !> Cutoff for lattice points to be returned
    real(wp), intent(in), optional :: cutoff
 
-   real(wp) :: cutoff2
+   real(wp) :: cutoff2, alen, blen, clen, mlen
    integer :: iTr, nTrans
 
    if (self%nTrans == 0) then
       return
    end if
 
+   alen = norm2(self%lattice(:, 1))
+   blen = norm2(self%lattice(:, 2))
+   clen = norm2(self%lattice(:, 3))
+   mlen = max(alen, blen, clen)
+
    if (present(cutoff)) then
-      cutoff2 = min(cutoff**2, self%cutoff**2)
+      cutoff2 = min((cutoff + mlen)**2, (self%cutoff + mlen)**2)
    else
-      cutoff2 = self%cutoff**2
+      cutoff2 = (self%cutoff + mlen)**2
    end if
 
    select case(self%boundaryCondition)
@@ -290,7 +296,7 @@ subroutine generatePBC3D(self)
 
    integer :: mTrans, nTrans
    integer :: iTr, iTr1, iTr2, iTr3
-   real(wp) :: cutoff2, r2, point(3)
+   real(wp) :: cutoff2, r2, point(3), alen, blen, clen, mlen
    integer, allocatable :: indx(:)
    integer, allocatable :: trans(:, :)
 
@@ -313,7 +319,12 @@ subroutine generatePBC3D(self)
       allocate(self%dist2(mTrans))
    end if
 
-   cutoff2 = self%cutoff**2
+   alen = norm2(self%lattice(:, 1))
+   blen = norm2(self%lattice(:, 2))
+   clen = norm2(self%lattice(:, 3))
+   mlen = max(alen, blen, clen)
+
+   cutoff2 = (self%cutoff + mlen)**2
 
    nTrans = 0
    do iTr1 = self%ranges(1, 1), self%ranges(2, 1)
@@ -364,13 +375,17 @@ subroutine getRangesPBC3D(lattice, cutoff, ranges)
    integer, intent(out) :: ranges(2, 3)
 
    integer :: tMax1, tMax2, tMax3
-   real(wp) :: cos1, cos2, cos3
+   real(wp) :: cos1, cos2, cos3, len1, len2, len3
    real(wp) :: normal1(3), normal2(3), normal3(3)
 
    !> Get normals to lattice vectors
    normal1 = crossProd(lattice(:, 2), lattice(:, 3))
    normal2 = crossProd(lattice(:, 3), lattice(:, 1))
    normal3 = crossProd(lattice(:, 1), lattice(:, 2))
+
+   len1 = norm2(lattice(:, 1))
+   len2 = norm2(lattice(:, 2))
+   len3 = norm2(lattice(:, 3))
 
    !> Normalize to unit length
    normal1 = normal1 / norm2(normal1)
@@ -383,9 +398,9 @@ subroutine getRangesPBC3D(lattice, cutoff, ranges)
    cos3 = dot_product(normal3, lattice(:, 3))
 
    !> Determine maximal translations
-   tMax1 = ceiling(abs(cutoff/cos1))
-   tMax2 = ceiling(abs(cutoff/cos2))
-   tMax3 = ceiling(abs(cutoff/cos3))
+   tMax1 = ceiling(abs((cutoff+len1)/cos1))
+   tMax2 = ceiling(abs((cutoff+len2)/cos2))
+   tMax3 = ceiling(abs((cutoff+len3)/cos3))
 
    !> Save maximal translations as ranges
    ranges(:, 1) = [-tMax1, tMax1]
