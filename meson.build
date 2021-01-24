@@ -26,7 +26,6 @@ project(
     'includedir=include/xtb',
     'buildtype=debugoptimized',
     'default_library=both',
-    'optimization=2',
   ],
 )
 

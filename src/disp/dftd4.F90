@@ -984,7 +984,7 @@ subroutine weight_references(dispm, nat, atoms, g_a, g_c, wf, q, cn, zeff, gam, 
    ! acc parallel default(present)
    ! acc loop gang private(zi, gi, norm, dnorm)
 !#else
-   !$omp parallel do shared(zetavec, zetadcn, zetadq, zerodcn) &
+   !$omp parallel do schedule(runtime) shared(zetavec, zetadcn, zetadq, zerodcn) &
    !$omp shared(nat, atoms, dispm, cn, q, g_a, g_c, wf, zerovec) &
    !$omp private(iat, ati, zi, gi, norm, dnorm, iref, icount, twf, gw, expw, &
    !$omp& expd, gwk, dgwk)
@@ -1090,7 +1090,7 @@ subroutine get_atomic_c6(dispm, nat, atoms, zetavec, zetadcn, zetadq, &
    !$acc parallel default(present)
    !$acc loop gang collapse(2)
 #else
-   !$omp parallel do default(none) shared(c6, dc6dcn, dc6dq) &
+   !$omp parallel do schedule(runtime) default(none) shared(c6, dc6dcn, dc6dq) &
    !$omp shared(nat, atoms, dispm, zetavec, zetadcn, zetadq) &
    !$omp private(iat, ati, jat, atj, dc6, dc6dcni, dc6dcnj, dc6dqi, dc6dqj, &
    !$omp& iref, jref, refc6)
@@ -1383,7 +1383,7 @@ subroutine disp_gradient_neigh &
    real(wp) :: r4r2ij, r0, rij(3), r2, t6, t8, t10, d6, d8, d10
    real(wp) :: dE, dG(3), dS(3, 3), disp, ddisp
 
-   !$omp parallel do default(none) &
+   !$omp parallel do schedule(runtime) default(none) &
    !$omp reduction(+:energies, gradient, sigma, dEdcn, dEdq) &
    !$omp shared(mol, neighs, neighlist, par, r4r2, c6, dc6dcn, dc6dq) &
    !$omp private(ij, img, jat, ati, atj, r2, rij, r4r2ij, r0, t6, t8, t10, &
@@ -1548,7 +1548,8 @@ subroutine atm_gradient_neigh &
    real(wp) :: dE, dG(3, 3), dS(3, 3), dCN(3)
    real(wp), parameter :: sr = 4.0_wp/3.0_wp
 
-   !$omp parallel do default(none) reduction(+:energies, gradient, sigma, dEdcn) &
+   !$omp parallel do schedule(runtime) default(none) &
+   !$omp reduction(+:energies, gradient, sigma, dEdcn) &
    !$omp shared(mol, neighs, neighlist, par, r4r2, c6, dc6dcn) &
    !$omp private(iat, ati, ij, jtr, r2ij, rij, jat, atj, ik, ktr, kat, atk, rik, &
    !$omp& r2ik, rjk, r2jk, c6ij, cij, c6ik, c6jk, cik, cjk, scale, dE, dG, dS, dCN)
@@ -1858,7 +1859,7 @@ subroutine disp_gradient_latp &
    real(wp) :: dE, dG(3), dS(3, 3), disp, ddisp
 
    cutoff2 = cutoff**2
-   !$omp parallel do default(none) &
+   !$omp parallel do schedule(runtime) default(none) &
    !$omp reduction(+:energies, gradient, sigma, dEdcn, dEdq) &
    !$omp shared(mol, trans, cutoff2, par, r4r2, c6, dc6dcn, dc6dq) &
    !$omp private(iat, jat, itr, ati, atj, r2, rij, r4r2ij, r0, t6, t8, t10, &
@@ -2030,7 +2031,8 @@ subroutine atm_gradient_latp &
 
    cutoff2 = cutoff**2
 
-   !$omp parallel do default(none) reduction(+:energies, gradient, sigma, dEdcn) &
+   !$omp parallel do default(none) schedule(runtime) &
+   !$omp reduction(+:energies, gradient, sigma, dEdcn) &
    !$omp shared(mol, r4r2, par, trans, cutoff2, c6, dc6dcn) &
    !$omp private(iat, ati, jat, atj, kat, atk, c6ij, cij, c6ik, c6jk, cik, cjk, &
    !$omp& rij, r2ij, ktr, rik, r2ik, rjk, r2jk, scale, dE, dG, dS, dCN)
