@@ -64,8 +64,15 @@ la_backend = get_option('la_backend')
 if la_backend == 'mkl' or la_backend == 'mkl-static'
   add_project_arguments('-DWITH_MKL', language: 'fortran')
   if la_backend == 'mkl-static'
-    add_project_link_arguments('-static', language: 'fortran')
-    add_project_link_arguments('-static', language: 'c') # icc will do linking
+    if host_machine.system() == 'darwin'
+      if fc.get_id() == 'intel'
+        add_project_link_arguments('-static-intel', language: 'fortran')
+        add_project_link_arguments('-static-intel', language: 'c') # icc will do linking
+      endif
+    else
+      add_project_link_arguments('-static', language: 'fortran')
+      add_project_link_arguments('-static', language: 'c') # icc will do linking
+    endif
   endif
 
   mkl_rt_dep = fc.find_library('mkl_rt', required: true)
