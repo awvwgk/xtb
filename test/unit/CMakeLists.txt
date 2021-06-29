@@ -45,38 +45,27 @@ set(tests
 )
 
 # Build Tests
-add_executable(xtb_tests_static ${tests})
-target_link_libraries(xtb_tests_static
-  PUBLIC
-  lib-xtb-static
+add_executable(
+  "${PROJECT_NAME}-tester"
+  "${tests}"
 )
-set_target_properties(xtb_tests_static PROPERTIES
-  Fortran_MODULE_DIRECTORY ${xtb-mod}
-  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+target_link_libraries(
+  "${PROJECT_NAME}-tester"
+  PUBLIC
+  "${PROJECT_NAME}-lib"
 )
 
-add_executable(xtb_tests_capi "${xtb-dir}/TESTSUITE/c_api_example.c")
-target_link_libraries(xtb_tests_capi
-  PUBLIC
-  lib-xtb-shared
-)
-set_target_properties(xtb_tests_capi PROPERTIES
-  Fortran_MODULE_DIRECTORY ${xtb-mod}
-  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
-)
-
-set(XTB-EXE ${CMAKE_BINARY_DIR}/xtb)
-set(XTB-TESTER ${CMAKE_BINARY_DIR}/xtb_tests_static)
-set(XTB-CTESTER ${CMAKE_BINARY_DIR}/xtb_tests_capi)
+set(XTB-EXE "${CMAKE_CURRENT_BINARY_DIR}/../../${PROJECT_NAME}")
+set(XTB-TESTER "${PROJECT_NAME}-tester")
 
 add_test("EXE_Argparser_print_version" ${XTB-EXE} --version)
 add_test("EXE_Argparser_print_help" ${XTB-EXE} --help)
 add_test("EXE_Argparser_print_license" ${XTB-EXE} --license)
 add_test("EXE_Info" ${XTB-EXE} info
-  "${xtb-dir}/assets/inputs/coord/caffeine.coord"
-  "${xtb-dir}/assets/inputs/coord/quartz.3d.coord"
-  "${xtb-dir}/assets/inputs/vasp/ammonia.vasp"
-  "${xtb-dir}/assets/inputs/xyz/taxol.xyz"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../assets/inputs/coord/caffeine.coord"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../assets/inputs/coord/quartz.3d.coord"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../assets/inputs/vasp/ammonia.vasp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../assets/inputs/xyz/taxol.xyz"
 )
 add_test("EXE_Singlepoint" ${XTB-EXE} --coffee --strict --norestart --namespace test1)
 add_test("EXE_IP/EA" ${XTB-EXE} --coffee --gfn 2 --vipea --strict --norestart --namespace test2)
@@ -168,15 +157,12 @@ add_test("GFN-FF_Scale_up" ${XTB-TESTER} gfnff scaleup)
 add_test("GFN-FF_PDB" ${XTB-TESTER} gfnff pdb)
 add_test("GFN-FF_SDF" ${XTB-TESTER} gfnff sdf)
 
-add_test("CAPI" ${XTB-CTESTER})
-
 set_tests_properties(EXE_Singlepoint
   "EXE_GFN0-xTB"
   "EXE_IP/EA"
   "EXE_GFN1-xTB"
   "EXE_GFN2-xTB/GBSA"
   "EXE_GFN2-FF"
-  "CAPI"
   "GFN2-xTB_SCC"
   "GFN2-xTB_API"
   "GFN2-xTB_API_GBSA"
@@ -200,5 +186,5 @@ set_tests_properties(EXE_Singlepoint
   "GFN0-xTB_API_PBC"
   "GFN0-xTB_SRB_PBC"
   PROPERTIES
-  ENVIRONMENT XTBPATH=${CMAKE_CURRENT_SOURCE_DIR}/..
+  ENVIRONMENT XTBPATH=${CMAKE_CURRENT_SOURCE_DIR}/../..
 )

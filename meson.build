@@ -20,18 +20,15 @@ project(
   'xtb',
   'fortran', 'c',
   version: '6.4.1',
-  license: 'LGPL3',
-  meson_version: '>=0.51',
+  license: 'LGPL-3.0-or-later',
+  meson_version: '>=0.55',
   default_options: [
-    'includedir=include/xtb',
     'buildtype=debugoptimized',
     'default_library=both',
-    'optimization=2',
   ],
 )
 
 install = not meson.is_subproject()
-install_modules = install and get_option('install_modules')
 
 commit = get_option('build_name')
 git = find_program('git', required: false)
@@ -94,44 +91,28 @@ xtb_inc = meson.current_source_dir() / 'include'
 incdir = include_directories('include')
 
 # Build target
-
-# create a static library from all sources,
-# this is the common base of all targets created for xtb
-xtb_common = static_library(
-  '_@0@'.format(meson.project_name()),
+xtb_lib = library(
+  meson.project_name(),
   sources: srcs,
+  version: meson.project_version(),
+  dependencies: lib_deps,
   include_directories: incdir,
-  dependencies: exe_deps,
-  install: false,
-  pic: true,
+  install: install,
 )
 
+xtb_inc = [incdir, xtb_lib.private_dir_include()]
+xtb_dep = declare_dependency(
+  link_with: xtb_lib,
+  include_directories: xtb_inc,
+  dependencies: lib_deps,
+  version: meson.project_version(),
+)
 xtb_dep_static = declare_dependency(
-  link_with: xtb_common,
-  include_directories: [incdir, xtb_common.private_dir_include()],
+  link_with: get_option('default_library') == 'both' ? xtb_lib.get_static_lib() : xtb_lib,
+  include_directories: xtb_inc,
   dependencies: exe_deps,
   version: meson.project_version(),
 )
-
-if fc.get_id() == 'pgi' or fc.get_id() == 'nvidia_hpc'
-   warning('Shared library extension cannot be compiled with PGI')
-else
-   xtb_lib = library(
-     meson.project_name(),
-     version: meson.project_version(),
-     dependencies: lib_deps,
-     include_directories: incdir,
-     link_whole: xtb_common,
-     install: install,
-   )
-
-   xtb_dep = declare_dependency(
-     link_with: xtb_lib,
-     include_directories: incdir,
-     dependencies: lib_deps,
-     version: meson.project_version(),
-   )
-endif
 
 xtb_exe = executable(
   meson.project_name(),
@@ -148,6 +129,19 @@ xtb_header = files('include/xtb.h')
 ## ========================================== ##
 if install
   install_headers(xtb_header)
+
+  module_id = meson.project_name() / fc.get_id() + '-' + fc.version()
+  meson.add_install_script(
+    find_program(files('meson'/'install-mod.py')),
+    get_option('includedir') / module_id,
+  )
+
+  pkg = import('pkgconfig')
+  pkg.generate(
+    xtb_lib,
+    description: 'Semiempricial extended tight binding program package',
+    subdirs: ['', module_id],
+  )
 endif
 
 asciidoc = find_program('asciidoctor', required: false)
@@ -178,21 +172,8 @@ xtb_parameter_files = [
 
 if install
   install_data(xtb_parameter_files)
-endif
 
-if install_modules
-  xtb_objs = []
-  foreach file: srcs
-    xtb_objs += '@0@.o'.format('_'.join(file.split('/')))
-  endforeach
-  install_subdir(meson.current_build_dir()/'@0@@sta'.format(meson.project_name()),
-                 install_dir: 'include',
-                 strip_directory: true,
-                 exclude_files: xtb_objs)
-endif
-
-# additional misc. files
-if install
+  # additional misc. files
   subdir('assets')
 endif
 
@@ -201,9 +182,7 @@ endif
 ## ========================================== ##
 # make sure the correct library is loaded
 xtbenv = environment()
-xtbenv.prepend('LD_LIBRARY_PATH', meson.current_build_dir())
-xtbenv.prepend('PYTHONPATH', meson.current_source_dir() / 'python')
 xtbenv.set('XTBPATH', meson.current_source_dir())
 
 # all tests are defined in a separate meson.build
-subdir('TESTSUITE')
+subdir('test')

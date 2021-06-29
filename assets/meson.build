@@ -25,12 +25,6 @@ foreach file: setup_files
                output: file, configuration: config))
 endforeach
 
-# generate a pkg-config file for xtb
-pkg_config = '@0@.pc'.format(meson.project_name())
-install_data(configure_file(input: files('templates'/pkg_config),
-             output: pkg_config, configuration: config),
-             install_dir: get_option('libdir')/'pkgconfig')
-
 # generate a tcl environment module
 # The convention is to name the file after the version and put it in a directory
 # with the program name, but we will name the intermediate tcl file differently.

@@ -74,10 +74,12 @@ Run the testsuite with
 
 [source,bash]
 ----
-ninja -C build test
+meson test -C build --print-errorlogs
 ----
 
 All tests should pass, otherwise https://github.com/grimme-lab/xtb/issues/new/choose[open an issue].
+If tests are taking longer than the default timeout on your machine, try to reduce the number of used threads by setting `OMP_NUM_THREADS` to half the number of cores or limit the number of parallel test jobs by adding the `--num-processes 1` argument.
+The test timeout can be disabled by setting `-t 0`.
 
 
 == Installing `xtb` with meson

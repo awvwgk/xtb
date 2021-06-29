@@ -61,6 +61,12 @@ add_project_arguments('-D_Float128=__float128', language: 'c')
 ## ========================================== ##
 
 la_backend = get_option('la_backend')
+if la_backend == 'auto'
+  if fc.get_id() == 'intel'
+    la_backend = 'mkl-static'
+  endif
+endif
+
 if la_backend == 'mkl' or la_backend == 'mkl-static'
   add_project_arguments('-DWITH_MKL', language: 'fortran')
   if la_backend == 'mkl-static'
@@ -112,7 +118,7 @@ elif la_backend == 'openblas'
   dependencies += blas_dep
   # some OpenBLAS versions can provide lapack, check if we can find dsygvd
   openblas_provides_lapack = fc.links(
-    files('openblas_lapack_test.f90'),
+    'call sygvd(); end',
     dependencies: blas_dep,
   )
   # otherwise we fall back to LAPACK

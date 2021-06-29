@@ -15,26 +15,60 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with xtb.  If not, see <https://www.gnu.org/licenses/>.
 
-option('la_backend', type: 'combo', value: 'mkl-static',
-       choices: ['mkl', 'mkl-rt', 'mkl-static', 'openblas', 'netlib', 'custom'],
-       description: 'Linear algebra backend for program.')
-option('custom_libraries', type: 'array', value: [],
-       description: 'libraries to load for custom linear algebra backend')
-option('openmp', type: 'boolean', value: true,
-       description: 'use OpenMP parallelisation')
-option('install_modules', type: 'boolean', value: false,
-       description: 'Install Fortran module files to include directory.')
-option('build_name', type: 'string', value: 'unknown',
-       description: 'Name of the build, will be overwritten automatically by git')
-option('test_timeout', type: 'integer', min: 1, value: 30,
-       description: 'test timeout in seconds')
+option(
+  'la_backend',
+  type: 'combo',
+  value: 'auto',
+  choices: ['auto', 'mkl', 'mkl-rt', 'mkl-static', 'openblas', 'netlib', 'custom'],
+  description: 'Linear algebra backend for program.',
+)
+option(
+  'custom_libraries',
+  type: 'array',
+  value: [],
+  description: 'libraries to load for custom linear algebra backend',
+)
+option(
+  'openmp',
+  type: 'boolean',
+  value: true,
+  description: 'use OpenMP parallelisation',
+)
+option(
+  'api',
+  type: 'boolean',
+  value: true,
+  description: 'Build C API using iso_c_binding module',
+)
+option(
+  'build_name',
+  type: 'string',
+  value: 'unknown',
+  description: 'Name of the build, will be overwritten automatically by git',
+)
 
 # GPU specific options
-option('gpu', type: 'boolean', value: false,
-       description: 'use GPU acceleration')
-option('gpu_arch', type: 'string', value: '70',
-       description: 'GPU architecture version string')
-option('cusolver', type: 'boolean', value: false,
-       description: 'Use cuSOLVER for eigensolver routines')
-option('nvtx', type: 'boolean', value: false,
-       description: 'use NVTX markers')
+option(
+  'gpu',
+  type: 'boolean',
+  value: false,
+  description: 'use GPU acceleration',
+)
+option(
+  'gpu_arch',
+  type: 'string',
+  value: '70',
+  description: 'GPU architecture version string',
+)
+option(
+  'cusolver',
+  type: 'boolean',
+  value: false,
+  description: 'Use cuSOLVER for eigensolver routines',
+)
+option(
+  'nvtx',
+  type: 'boolean',
+  value: false,
+  description: 'use NVTX markers',
+)
