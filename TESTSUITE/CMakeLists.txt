@@ -48,26 +48,18 @@ set(tests
 add_executable(xtb_tests_static ${tests})
 target_link_libraries(xtb_tests_static
   PUBLIC
-  lib-xtb-static
-)
-set_target_properties(xtb_tests_static PROPERTIES
-  Fortran_MODULE_DIRECTORY ${xtb-mod}
-  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+  "${PROJECT_NAME}-lib"
 )
 
 add_executable(xtb_tests_capi "${xtb-dir}/TESTSUITE/c_api_example.c")
 target_link_libraries(xtb_tests_capi
   PUBLIC
-  lib-xtb-shared
-)
-set_target_properties(xtb_tests_capi PROPERTIES
-  Fortran_MODULE_DIRECTORY ${xtb-mod}
-  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+  "${PROJECT_NAME}-lib"
 )
 
-set(XTB-EXE ${CMAKE_BINARY_DIR}/xtb)
-set(XTB-TESTER ${CMAKE_BINARY_DIR}/xtb_tests_static)
-set(XTB-CTESTER ${CMAKE_BINARY_DIR}/xtb_tests_capi)
+set(XTB-EXE ${PROJECT_BINARY_DIR}/xtb)
+set(XTB-TESTER ${CMAKE_CURRENT_BINARY_DIR}/xtb_tests_static)
+set(XTB-CTESTER ${CMAKE_CURRENT_BINARY_DIR}/xtb_tests_capi)
 
 add_test("EXE_Argparser_print_version" ${XTB-EXE} --version)
 add_test("EXE_Argparser_print_help" ${XTB-EXE} --help)
